@@ -10,7 +10,7 @@ import {
   ThumbsDown,
   ThumbsUp,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import { useParams } from "next/navigation";
@@ -31,6 +31,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { SUBJECTS, LEVELS } from "@/lib/constants";
 import { api } from "@/trpc/react";
 
 interface Reference {
@@ -49,33 +50,35 @@ function getMessageText(msg: UIMessage): string {
     .join("");
 }
 
-function ReferenceCard({ reference }: { reference: Reference }) {
+function ReferenceChip({ reference }: { reference: Reference }) {
+  const [expanded, setExpanded] = useState(false);
   return (
-    <div className="flex items-start gap-3 rounded-lg border bg-muted/50 p-3">
-      <FileText className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          {reference.subject && (
-            <Badge variant="secondary" className="text-xs">
-              {reference.subject}
-            </Badge>
-          )}
-          {reference.level && (
-            <Badge variant="outline" className="text-xs">
-              {reference.level}
-            </Badge>
-          )}
-          {reference.similarity !== undefined && (
-            <span className="text-muted-foreground text-xs">
-              {(reference.similarity * 100).toFixed(0)}% match
-            </span>
-          )}
-        </div>
-        <p className="mt-1 line-clamp-2 text-muted-foreground text-xs leading-relaxed">
+    <button
+      type="button"
+      onClick={() => setExpanded(!expanded)}
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-all hover:bg-muted/80",
+        expanded ? "bg-muted/60" : "bg-muted/30",
+      )}
+    >
+      <FileText className="size-3 shrink-0 text-muted-foreground" />
+      {reference.subject && (
+        <span className="font-medium">{reference.subject}</span>
+      )}
+      {reference.level && (
+        <span className="text-muted-foreground">{reference.level}</span>
+      )}
+      {reference.similarity !== undefined && (
+        <span className="text-muted-foreground">
+          {(reference.similarity * 100).toFixed(0)}%
+        </span>
+      )}
+      {expanded && (
+        <span className="ml-1 max-w-xs text-left text-muted-foreground line-clamp-2">
           {reference.content}
-        </p>
-      </div>
-    </div>
+        </span>
+      )}
+    </button>
   );
 }
 
@@ -111,16 +114,14 @@ function ChatMessage({
         </div>
 
         {!isUser && references && references.length > 0 && (
-          <div className="mt-3">
-            <p className="mb-2 flex items-center gap-1.5 font-medium text-muted-foreground text-xs">
+          <div className="mt-2 flex flex-wrap items-center gap-1.5">
+            <span className="flex items-center gap-1 text-muted-foreground text-xs">
               <BookOpen className="size-3" />
-              Sources ({references.length})
-            </p>
-            <div className="flex flex-col gap-2">
-              {references.map((ref, i) => (
-                <ReferenceCard key={ref.chunkId || i} reference={ref} />
-              ))}
-            </div>
+              Sources:
+            </span>
+            {references.map((ref, i) => (
+              <ReferenceChip key={ref.chunkId || i} reference={ref} />
+            ))}
           </div>
         )}
 
@@ -201,6 +202,7 @@ export default function ConversationPage() {
   const [subject, setSubject] = useState<string>("");
   const [level, setLevel] = useState<string>("");
   const [input, setInput] = useState("");
+  const [isSending, setIsSending] = useState(false);
 
   // Load existing conversation
   const { data: conversation, isLoading: loadingConversation } =
@@ -269,24 +271,29 @@ export default function ConversationPage() {
     }
   }, [messages]);
 
-  const handleSendMessage = async (e?: React.FormEvent) => {
-    e?.preventDefault();
-    if (!input.trim()) return;
+  const handleSendMessage = useCallback(
+    async (e?: React.FormEvent) => {
+      e?.preventDefault();
+      if (!input.trim() || isSending) return;
+      setIsSending(true);
 
-    const messageText = input.trim();
+      const messageText = input.trim();
+      setInput("");
 
-    // Persist user message
-    if (conversationId) {
-      void addMessage.mutateAsync({
-        conversationId,
-        role: "user",
-        content: messageText,
-      });
-    }
+      // Persist user message
+      if (conversationId) {
+        void addMessage.mutateAsync({
+          conversationId,
+          role: "user",
+          content: messageText,
+        });
+      }
 
-    setInput("");
-    void sendMessage({ text: messageText });
-  };
+      void sendMessage({ text: messageText });
+      setIsSending(false);
+    },
+    [input, isSending, conversationId, addMessage, sendMessage],
+  );
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -366,10 +373,11 @@ export default function ConversationPage() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Subjects</SelectItem>
-              <SelectItem value="History">History</SelectItem>
-              <SelectItem value="Civics">Civics</SelectItem>
-              <SelectItem value="Geography">Geography</SelectItem>
-              <SelectItem value="Literature">Literature</SelectItem>
+              {SUBJECTS.map((s) => (
+                <SelectItem key={s} value={s}>
+                  {s}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
           <Select value={level} onValueChange={setLevel}>
@@ -378,10 +386,11 @@ export default function ConversationPage() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Forms</SelectItem>
-              <SelectItem value="Form 1">Form 1</SelectItem>
-              <SelectItem value="Form 2">Form 2</SelectItem>
-              <SelectItem value="Form 3">Form 3</SelectItem>
-              <SelectItem value="Form 4">Form 4</SelectItem>
+              {LEVELS.map((l) => (
+                <SelectItem key={l} value={l}>
+                  {l}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
@@ -439,7 +448,7 @@ export default function ConversationPage() {
           />
           <Button
             aria-label="Send message"
-            disabled={!input.trim() || isLoading}
+            disabled={!input.trim() || isLoading || isSending}
             type="submit"
             size="icon"
           >
