@@ -7,6 +7,8 @@ import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
 import { documents, chunks, users } from "@/server/db/schema";
 import { generateEmbeddings } from "@/server/ai/embedding";
 import { splitTextIntoChunks } from "@/lib/chunker";
+import "pdf-parse/worker"; // Import this before importing "pdf-parse"
+import { PDFParse } from "pdf-parse";
 
 // ---------------------------------------------------------------------------
 // Admin guard middleware
@@ -150,7 +152,6 @@ export const documentRouter = createTRPCRouter({
             doc.mimeType === "application/pdf" ||
             doc.filename.endsWith(".pdf")
           ) {
-            const { PDFParse } = await import("pdf-parse");
             const pdfDoc = new PDFParse({ data: buffer });
             const result = await pdfDoc.getText();
             fullText = result.text;
