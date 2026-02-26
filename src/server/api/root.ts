@@ -1,6 +1,7 @@
 import { authRouter } from "@/server/api/routers/auth";
 import { postRouter } from "@/server/api/routers/post";
 import { chatRouter } from "@/server/api/routers/chat";
+import { benchmarkRouter } from "@/server/api/routers/benchmark";
 import { documentRouter } from "@/server/api/routers/document";
 import { userRouter } from "@/server/api/routers/user";
 import { createCallerFactory, createTRPCRouter } from "@/server/api/trpc";
@@ -14,6 +15,7 @@ export const appRouter = createTRPCRouter({
   auth: authRouter,
   post: postRouter,
   chat: chatRouter,
+  benchmark: benchmarkRouter,
   document: documentRouter,
   user: userRouter,
 });

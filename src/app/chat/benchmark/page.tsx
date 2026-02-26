@@ -5,8 +5,11 @@ import {
   Copy,
   FileText,
   GitCompareArrows,
+  History,
+  Plus,
   SendHorizontal,
   Sparkles,
+  Trash2,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useChat } from "@ai-sdk/react";
@@ -15,7 +18,6 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Select,
   SelectContent,
@@ -24,10 +26,20 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { SUBJECTS, LEVELS, MODELS, type MODELS_NAMES } from "@/lib/constants";
 import { api } from "@/trpc/react";
@@ -280,6 +292,127 @@ function ModelPanel({
 }
 
 /* ------------------------------------------------------------------ */
+/*  Helpers for model name <-> key lookups                             */
+/* ------------------------------------------------------------------ */
+
+/** Find MODELS_NAMES key from model key string (e.g. "gpt-4o-mini" -> "gpt_4o_mini") */
+function modelNameFromKey(key: string): MODELS_NAMES {
+  const entry = MODEL_ENTRIES.find(([, m]) => m.key === key);
+  return entry ? entry[0] : "gpt_4o_mini";
+}
+
+/* ------------------------------------------------------------------ */
+/*  Benchmark switcher modal                                           */
+/* ------------------------------------------------------------------ */
+
+function BenchmarkSwitcher({
+  currentBenchmarkId,
+  onSelect,
+  onNew,
+}: {
+  currentBenchmarkId: string | null;
+  onSelect: (id: string) => void;
+  onNew: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const { data: benchmarksList } = api.benchmark.list.useQuery();
+  const softDelete = api.benchmark.softDelete.useMutation();
+  const utils = api.useUtils();
+
+  const handleDelete = async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    await softDelete.mutateAsync({ id });
+    void utils.benchmark.list.invalidate();
+    void utils.benchmark.getLatest.invalidate();
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button variant="outline" size="sm" className="h-8 gap-1 text-xs">
+          <History className="size-3" />
+          History
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Benchmark History</DialogTitle>
+          <DialogDescription>
+            Switch between previous benchmark sessions or start a new one.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="mt-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="mb-3 w-full gap-1"
+            onClick={() => {
+              onNew();
+              setOpen(false);
+            }}
+          >
+            <Plus className="size-3" />
+            New Benchmark
+          </Button>
+
+          <ScrollArea className="max-h-80">
+            <div className="flex flex-col gap-1">
+              {benchmarksList?.length === 0 && (
+                <p className="py-6 text-center text-muted-foreground text-sm">
+                  No benchmarks yet.
+                </p>
+              )}
+              {benchmarksList?.map((b) => (
+                <button
+                  key={b.id}
+                  type="button"
+                  onClick={() => {
+                    onSelect(b.id);
+                    setOpen(false);
+                  }}
+                  className={cn(
+                    "flex items-center justify-between rounded-md px-3 py-2.5 text-left text-sm transition-colors hover:bg-muted",
+                    b.id === currentBenchmarkId && "bg-muted",
+                  )}
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-medium">
+                      {b.title ?? "Untitled"}
+                    </p>
+                    <p className="mt-0.5 text-muted-foreground text-xs">
+                      {b.modelLeft} vs {b.modelRight}
+                      {b.subject ? ` · ${b.subject}` : ""}
+                      {b.level ? ` · ${b.level}` : ""}
+                    </p>
+                    <p className="text-muted-foreground text-xs">
+                      {new Date(b.createdAt).toLocaleDateString()}
+                    </p>
+                  </div>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        className="ml-2 shrink-0 text-muted-foreground hover:text-destructive"
+                        onClick={(e) => void handleDelete(b.id, e)}
+                      >
+                        <Trash2 className="size-3.5" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Delete</TooltipContent>
+                  </Tooltip>
+                </button>
+              ))}
+            </div>
+          </ScrollArea>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /*  Main page                                                          */
 /* ------------------------------------------------------------------ */
 
@@ -291,13 +424,90 @@ export default function BenchmarkPage() {
   const [input, setInput] = useState("");
   const [isSending, setIsSending] = useState(false);
 
-  // Conversation IDs for persistence — created on first send
+  // Current benchmark record
+  const [benchmarkId, setBenchmarkId] = useState<string | null>(null);
   const [convIdLeft, setConvIdLeft] = useState<string | null>(null);
   const [convIdRight, setConvIdRight] = useState<string | null>(null);
+  const [initialised, setInitialised] = useState(false);
 
-  const createConversation = api.chat.createConversation.useMutation();
+  const createBenchmark = api.benchmark.create.useMutation();
   const addMessage = api.chat.addMessage.useMutation();
   const utils = api.useUtils();
+
+  // Load latest benchmark on mount
+  const { data: latestBenchmark, isLoading: loadingLatest } =
+    api.benchmark.getLatest.useQuery(undefined, {
+      enabled: !initialised,
+    });
+
+  // Load a specific benchmark (when switching)
+  const [loadBenchId, setLoadBenchId] = useState<string | null>(null);
+  const { data: loadedBenchmark } = api.benchmark.get.useQuery(
+    { id: loadBenchId! },
+    { enabled: !!loadBenchId },
+  );
+
+  // Load conversations for the active benchmark
+  const { data: convLeftData } = api.chat.getConversation.useQuery(
+    { id: convIdLeft! },
+    { enabled: !!convIdLeft },
+  );
+  const { data: convRightData } = api.chat.getConversation.useQuery(
+    { id: convIdRight! },
+    { enabled: !!convIdRight },
+  );
+
+  // Seed from latest benchmark on first load
+  useEffect(() => {
+    if (initialised || loadingLatest) return;
+    if (latestBenchmark) {
+      setBenchmarkId(latestBenchmark.id);
+      setConvIdLeft(latestBenchmark.conversationLeftId);
+      setConvIdRight(latestBenchmark.conversationRightId);
+      setModelLeft(modelNameFromKey(latestBenchmark.modelLeft));
+      setModelRight(modelNameFromKey(latestBenchmark.modelRight));
+      if (latestBenchmark.subject) setSubject(latestBenchmark.subject);
+      if (latestBenchmark.level) setLevel(latestBenchmark.level);
+    }
+    setInitialised(true);
+  }, [latestBenchmark, loadingLatest, initialised]);
+
+  // Handle switching to a loaded benchmark
+  useEffect(() => {
+    if (!loadedBenchmark) return;
+    setBenchmarkId(loadedBenchmark.id);
+    setConvIdLeft(loadedBenchmark.conversationLeftId);
+    setConvIdRight(loadedBenchmark.conversationRightId);
+    setModelLeft(modelNameFromKey(loadedBenchmark.modelLeft));
+    setModelRight(modelNameFromKey(loadedBenchmark.modelRight));
+    if (loadedBenchmark.subject) setSubject(loadedBenchmark.subject);
+    if (loadedBenchmark.level) setLevel(loadedBenchmark.level);
+    setLoadBenchId(null);
+    // Reset chat messages to force reload from DB conversations
+    chatLeft.setMessages([]);
+    chatRight.setMessages([]);
+  }, [loadedBenchmark]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Build initial messages from loaded conversations
+  const initialMessagesLeft: UIMessage[] = useMemo(
+    () =>
+      convLeftData?.messages?.map((m) => ({
+        id: m.id,
+        role: m.role as "user" | "assistant",
+        parts: [{ type: "text" as const, text: m.content }],
+      })) ?? [],
+    [convLeftData?.messages],
+  );
+
+  const initialMessagesRight: UIMessage[] = useMemo(
+    () =>
+      convRightData?.messages?.map((m) => ({
+        id: m.id,
+        role: m.role as "user" | "assistant",
+        parts: [{ type: "text" as const, text: m.content }],
+      })) ?? [],
+    [convRightData?.messages],
+  );
 
   /* -- Transport for model A (left panel) -- */
   const transportLeft = useMemo(
@@ -330,19 +540,38 @@ export default function BenchmarkPage() {
   );
 
   const chatLeft = useChat({
-    id: "bench-left",
+    id: `bench-left-${convIdLeft ?? "new"}`,
     transport: transportLeft,
+    messages: initialMessagesLeft.length > 0 ? initialMessagesLeft : undefined,
     onFinish: () => {
-      void utils.chat.listConversations.invalidate();
+      void utils.benchmark.list.invalidate();
+      void utils.benchmark.getLatest.invalidate();
     },
   });
   const chatRight = useChat({
-    id: "bench-right",
+    id: `bench-right-${convIdRight ?? "new"}`,
     transport: transportRight,
+    messages:
+      initialMessagesRight.length > 0 ? initialMessagesRight : undefined,
     onFinish: () => {
-      void utils.chat.listConversations.invalidate();
+      void utils.benchmark.list.invalidate();
+      void utils.benchmark.getLatest.invalidate();
     },
   });
+
+  // Sync DB messages into chat when conversation data loads
+  const leftMsgCount = convLeftData?.messages?.length ?? 0;
+  const rightMsgCount = convRightData?.messages?.length ?? 0;
+  useEffect(() => {
+    if (initialMessagesLeft.length > 0 && chatLeft.messages.length === 0) {
+      chatLeft.setMessages(initialMessagesLeft);
+    }
+  }, [leftMsgCount]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (initialMessagesRight.length > 0 && chatRight.messages.length === 0) {
+      chatRight.setMessages(initialMessagesRight);
+    }
+  }, [rightMsgCount]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const isLoadingLeft =
     chatLeft.status === "streaming" || chatLeft.status === "submitted";
@@ -350,6 +579,7 @@ export default function BenchmarkPage() {
     chatRight.status === "streaming" || chatRight.status === "submitted";
   const isLoading = isLoadingLeft || isLoadingRight;
 
+  /* ---- Send message ---- */
   const handleSend = useCallback(
     async (e?: React.FormEvent) => {
       e?.preventDefault();
@@ -360,38 +590,33 @@ export default function BenchmarkPage() {
       setInput("");
 
       try {
-        // Ensure conversations exist for persistence
         let leftId = convIdLeft;
         let rightId = convIdRight;
 
-        if (!leftId) {
-          const conv = await createConversation.mutateAsync({
-            title: `[Benchmark] ${MODELS[modelLeft].label}`,
+        // Create benchmark record + conversations on first send
+        if (!benchmarkId) {
+          const bench = await createBenchmark.mutateAsync({
+            title: `${MODELS[modelLeft].label} vs ${MODELS[modelRight].label}`,
+            modelLeft: MODELS[modelLeft].key,
+            modelRight: MODELS[modelRight].key,
             subject: subject || undefined,
             level: level || undefined,
           });
-          leftId = conv!.id;
+          setBenchmarkId(bench!.id);
+          leftId = bench!.conversationLeftId;
+          rightId = bench!.conversationRightId;
           setConvIdLeft(leftId);
-        }
-
-        if (!rightId) {
-          const conv = await createConversation.mutateAsync({
-            title: `[Benchmark] ${MODELS[modelRight].label}`,
-            subject: subject || undefined,
-            level: level || undefined,
-          });
-          rightId = conv!.id;
           setConvIdRight(rightId);
         }
 
         // Persist user message to both conversations
         void addMessage.mutateAsync({
-          conversationId: leftId,
+          conversationId: leftId!,
           role: "user",
           content: text,
         });
         void addMessage.mutateAsync({
-          conversationId: rightId,
+          conversationId: rightId!,
           role: "user",
           content: text,
         });
@@ -409,9 +634,10 @@ export default function BenchmarkPage() {
       isLoading,
       chatLeft,
       chatRight,
+      benchmarkId,
       convIdLeft,
       convIdRight,
-      createConversation,
+      createBenchmark,
       addMessage,
       modelLeft,
       modelRight,
@@ -427,12 +653,38 @@ export default function BenchmarkPage() {
     }
   };
 
-  const handleClear = useCallback(() => {
+  /* ---- New benchmark ---- */
+  const handleNew = useCallback(() => {
     chatLeft.setMessages([]);
     chatRight.setMessages([]);
+    setBenchmarkId(null);
     setConvIdLeft(null);
     setConvIdRight(null);
+    setModelLeft("gpt_4o_mini");
+    setModelRight("gpt_4o");
+    setSubject("");
+    setLevel("");
   }, [chatLeft, chatRight]);
+
+  /* ---- Switch to existing benchmark ---- */
+  const handleSelectBenchmark = useCallback((id: string) => {
+    setLoadBenchId(id);
+  }, []);
+
+  if (!initialised) {
+    return (
+      <div className="flex h-full items-center justify-center text-muted-foreground">
+        <div className="flex items-center gap-2">
+          <div className="flex gap-1">
+            <span className="size-1.5 animate-bounce rounded-full bg-current [animation-delay:0ms]" />
+            <span className="size-1.5 animate-bounce rounded-full bg-current [animation-delay:150ms]" />
+            <span className="size-1.5 animate-bounce rounded-full bg-current [animation-delay:300ms]" />
+          </div>
+          Loading benchmarks...
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-full flex-col">
@@ -443,8 +695,8 @@ export default function BenchmarkPage() {
           Model Benchmark
         </Badge>
 
-        {/* Subject / Level shared filters */}
         <div className="ml-auto flex items-center gap-2">
+          {/* Subject / Level shared filters */}
           <Select value={subject} onValueChange={setSubject}>
             <SelectTrigger className="h-8 w-32 text-xs">
               <SelectValue placeholder="Subject" />
@@ -472,14 +724,23 @@ export default function BenchmarkPage() {
             </SelectContent>
           </Select>
 
+          <Separator orientation="vertical" className="h-6" />
+
+          <BenchmarkSwitcher
+            currentBenchmarkId={benchmarkId}
+            onSelect={handleSelectBenchmark}
+            onNew={handleNew}
+          />
+
           <Button
             variant="outline"
             size="sm"
-            className="h-8 text-xs"
-            onClick={handleClear}
+            className="h-8 gap-1 text-xs"
+            onClick={handleNew}
             disabled={isLoading}
           >
-            Clear
+            <Plus className="size-3" />
+            New
           </Button>
         </div>
       </header>
@@ -494,6 +755,7 @@ export default function BenchmarkPage() {
           <Select
             value={modelLeft}
             onValueChange={(v) => setModelLeft(v as MODELS_NAMES)}
+            disabled={!!benchmarkId}
           >
             <SelectTrigger className="h-8 w-52 text-xs">
               <SelectValue />
@@ -516,6 +778,7 @@ export default function BenchmarkPage() {
           <Select
             value={modelRight}
             onValueChange={(v) => setModelRight(v as MODELS_NAMES)}
+            disabled={!!benchmarkId}
           >
             <SelectTrigger className="h-8 w-52 text-xs">
               <SelectValue />

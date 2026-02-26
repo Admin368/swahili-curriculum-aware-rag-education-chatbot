@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { eq, desc, and } from "drizzle-orm";
+import { eq, desc, and, ne } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { generateObject } from "ai";
 
@@ -23,7 +23,12 @@ export const chatRouter = createTRPCRouter({
         updatedAt: conversations.updatedAt,
       })
       .from(conversations)
-      .where(eq(conversations.userId, ctx.session.user.id))
+      .where(
+        and(
+          eq(conversations.userId, ctx.session.user.id),
+          ne(conversations.type, "benchmark"),
+        ),
+      )
       .orderBy(desc(conversations.updatedAt));
 
     return result;

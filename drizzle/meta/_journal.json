@@ -15,6 +15,13 @@
       "when": 1772075364990,
       "tag": "0001_keen_silver_sable",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1772094354839,
+      "tag": "0002_add-benchmarks",
+      "breakpoints": true
     }
   ]
 }

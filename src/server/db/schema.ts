@@ -240,6 +240,11 @@ export const conversations = createTable(
     title: d.varchar({ length: 500 }).default("New Chat"),
     subject: d.varchar({ length: 63 }),
     level: d.varchar({ length: 31 }),
+    type: d
+      .varchar({ length: 31 })
+      .notNull()
+      .default("chat")
+      .$type<"chat" | "benchmark">(),
     createdAt: d
       .timestamp({ withTimezone: true })
       .$defaultFn(() => new Date())
@@ -252,6 +257,7 @@ export const conversations = createTable(
   (t) => [
     index("conv_user_idx").on(t.userId),
     index("conv_updated_idx").on(t.updatedAt),
+    index("conv_type_idx").on(t.type),
   ],
 );
 
@@ -265,6 +271,69 @@ export const conversationsRelations = relations(
     messages: many(messages),
   }),
 );
+
+// ---------------------------------------------------------------------------
+// Benchmarks — side-by-side model comparison sessions
+// ---------------------------------------------------------------------------
+
+export const benchmarks = createTable(
+  "benchmark",
+  (d) => ({
+    id: d
+      .varchar({ length: 255 })
+      .notNull()
+      .primaryKey()
+      .$defaultFn(() => nanoid()),
+    userId: d
+      .varchar({ length: 255 })
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    title: d.varchar({ length: 500 }).default("New Benchmark"),
+    modelLeft: d.varchar({ length: 127 }).notNull(),
+    modelRight: d.varchar({ length: 127 }).notNull(),
+    conversationLeftId: d
+      .varchar({ length: 255 })
+      .notNull()
+      .references(() => conversations.id, { onDelete: "cascade" }),
+    conversationRightId: d
+      .varchar({ length: 255 })
+      .notNull()
+      .references(() => conversations.id, { onDelete: "cascade" }),
+    subject: d.varchar({ length: 63 }),
+    level: d.varchar({ length: 31 }),
+    isDeleted: d.boolean().notNull().default(false),
+    createdAt: d
+      .timestamp({ withTimezone: true })
+      .$defaultFn(() => new Date())
+      .notNull(),
+    updatedAt: d
+      .timestamp({ withTimezone: true })
+      .$defaultFn(() => new Date())
+      .$onUpdate(() => new Date()),
+  }),
+  (t) => [
+    index("bench_user_idx").on(t.userId),
+    index("bench_deleted_idx").on(t.isDeleted),
+    index("bench_updated_idx").on(t.updatedAt),
+  ],
+);
+
+export const benchmarksRelations = relations(benchmarks, ({ one }) => ({
+  user: one(users, {
+    fields: [benchmarks.userId],
+    references: [users.id],
+  }),
+  conversationLeft: one(conversations, {
+    fields: [benchmarks.conversationLeftId],
+    references: [conversations.id],
+    relationName: "benchmarkLeft",
+  }),
+  conversationRight: one(conversations, {
+    fields: [benchmarks.conversationRightId],
+    references: [conversations.id],
+    relationName: "benchmarkRight",
+  }),
+}));
 
 // ---------------------------------------------------------------------------
 // Messages — individual chat messages
