@@ -1,12 +1,12 @@
+import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { createOpenAI } from "@ai-sdk/openai";
 import { env } from "@/env";
 
 /**
  * OpenRouter provider for chat generation (gpt-4o-mini).
- * Uses the OpenAI-compatible API at openrouter.ai.
+ * Uses the official @openrouter/ai-sdk-provider package.
  */
-export const openrouter = createOpenAI({
-  baseURL: "https://openrouter.ai/api/v1",
+export const openrouter = createOpenRouter({
   apiKey: env.OPENROUTER_API_KEY,
 });
 
