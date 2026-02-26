@@ -10,9 +10,10 @@ import {
   ThumbsDown,
   ThumbsUp,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
+import { useParams } from "next/navigation";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -193,34 +194,58 @@ function ChatMessage({
   );
 }
 
-const suggestions = [
-  "Eleza maana ya Historia ya Tanzania",
-  "What was the Ngoni migration?",
-  "Taja sababu za mwingiliano wa Waafrika",
-  "Explain factors for African interactions",
-];
-
-export default function GeneralChatPage() {
+export default function ConversationPage() {
+  const params = useParams<{ conversationId: string }>();
+  const conversationId = params.conversationId;
+  const scrollRef = useRef<HTMLDivElement>(null);
   const [subject, setSubject] = useState<string>("");
   const [level, setLevel] = useState<string>("");
   const [input, setInput] = useState("");
-  const [conversationId, setConversationId] = useState<string | null>(null);
-  const scrollRef = useRef<HTMLDivElement>(null);
 
-  const createConversation = api.chat.createConversation.useMutation();
+  // Load existing conversation
+  const { data: conversation, isLoading: loadingConversation } =
+    api.chat.getConversation.useQuery(
+      { id: conversationId },
+      { enabled: !!conversationId },
+    );
+
   const addMessage = api.chat.addMessage.useMutation();
-  const autoTitle = api.chat.autoTitle.useMutation();
   const utils = api.useUtils();
 
+  // Convert DB messages to UIMessage format for initial messages
+  const initialMessages: UIMessage[] = useMemo(
+    () =>
+      conversation?.messages?.map((m) => ({
+        id: m.id,
+        role: m.role as "user" | "assistant",
+        parts: [{ type: "text" as const, text: m.content }],
+      })) ?? [],
+    [conversation?.messages],
+  );
+
+  const transport = useMemo(
+    () =>
+      new DefaultChatTransport({
+        api: "/api/chat",
+        body: {
+          conversationId,
+          subject: subject || conversation?.subject || undefined,
+          level: level || conversation?.level || undefined,
+        },
+      }),
+    [
+      conversationId,
+      subject,
+      level,
+      conversation?.subject,
+      conversation?.level,
+    ],
+  );
+
   const { messages, sendMessage, status } = useChat({
-    transport: new DefaultChatTransport({
-      api: "/api/chat",
-      body: {
-        conversationId,
-        subject: subject || undefined,
-        level: level || undefined,
-      },
-    }),
+    id: conversationId,
+    transport,
+    messages: initialMessages.length > 0 ? initialMessages : undefined,
     onFinish: () => {
       void utils.chat.listConversations.invalidate();
     },
@@ -228,7 +253,15 @@ export default function GeneralChatPage() {
 
   const isLoading = status === "streaming" || status === "submitted";
 
-  // Auto-scroll on new messages
+  // Set subject/level from conversation metadata
+  useEffect(() => {
+    if (conversation) {
+      if (conversation.subject) setSubject(conversation.subject);
+      if (conversation.level) setLevel(conversation.level);
+    }
+  }, [conversation]);
+
+  // Auto-scroll
   useEffect(() => {
     if (messages.length === 0) return;
     if (scrollRef.current) {
@@ -241,40 +274,16 @@ export default function GeneralChatPage() {
     if (!input.trim()) return;
 
     const messageText = input.trim();
-    let activeConvId = conversationId;
-
-    // Create conversation on first message
-    if (!activeConvId) {
-      try {
-        const conv = await createConversation.mutateAsync({
-          subject: subject || undefined,
-          level: level || undefined,
-        });
-        if (conv) {
-          activeConvId = conv.id;
-          setConversationId(conv.id);
-
-          // Auto-title from first message
-          void autoTitle.mutateAsync({
-            id: conv.id,
-            firstMessage: messageText,
-          });
-        }
-      } catch {
-        // Continue without persistence if creation fails
-      }
-    }
 
     // Persist user message
-    if (activeConvId) {
+    if (conversationId) {
       void addMessage.mutateAsync({
-        conversationId: activeConvId,
+        conversationId,
         role: "user",
         content: messageText,
       });
     }
 
-    // Send to AI (useChat v6 handles the rest)
     setInput("");
     void sendMessage({ text: messageText });
   };
@@ -286,19 +295,17 @@ export default function GeneralChatPage() {
     }
   };
 
-  // Extract references from assistant messages' tool invocations (v6 parts)
+  // Extract references from tool invocations (v6 parts)
   const getReferencesForMessage = (msg: UIMessage): Reference[] => {
     if (msg.role !== "assistant") return [];
     const refs: Reference[] = [];
     for (const part of msg.parts) {
-      // In v6, tool parts have type 'tool-${toolName}' or 'dynamic-tool'
       if (
         "toolCallId" in part &&
         "state" in part &&
         part.state === "output-available" &&
         "output" in part
       ) {
-        // Check if this is the getInformation tool
         const toolType = part.type as string;
         if (
           toolType === "tool-getInformation" ||
@@ -327,6 +334,21 @@ export default function GeneralChatPage() {
     return refs;
   };
 
+  if (loadingConversation) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <div className="flex items-center gap-2 text-muted-foreground text-sm">
+          <div className="flex gap-1">
+            <span className="size-1.5 animate-bounce rounded-full bg-current [animation-delay:0ms]" />
+            <span className="size-1.5 animate-bounce rounded-full bg-current [animation-delay:150ms]" />
+            <span className="size-1.5 animate-bounce rounded-full bg-current [animation-delay:300ms]" />
+          </div>
+          Loading conversation...
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-full flex-col">
       {/* Header */}
@@ -334,7 +356,7 @@ export default function GeneralChatPage() {
         <div className="flex items-center gap-2 pl-10 md:pl-0">
           <Badge className="gap-1" variant="secondary">
             <Sparkles className="size-3" />
-            Elimu AI Chat
+            {conversation?.title ?? "Elimu AI Chat"}
           </Badge>
         </div>
         <div className="flex items-center gap-2">
@@ -368,63 +390,36 @@ export default function GeneralChatPage() {
       {/* Messages */}
       <div className="flex-1 overflow-y-auto" ref={scrollRef}>
         <div className="mx-auto max-w-3xl px-6 py-6">
-          {messages.length === 0 ? (
-            <div className="flex flex-col items-center justify-center pt-20">
-              <div className="flex size-14 items-center justify-center rounded-2xl bg-primary/10">
-                <Sparkles className="size-6 text-primary" />
-              </div>
-              <h2 className="mt-4 font-semibold text-foreground text-lg">
-                Karibu! How can I help you study?
-              </h2>
-              <p className="mt-1 text-center text-muted-foreground text-sm">
-                Ask questions about your curriculum materials in English or
-                Swahili.
-              </p>
-              <div className="mt-8 grid w-full max-w-lg grid-cols-2 gap-2">
-                {suggestions.map((s) => (
-                  <button
-                    className="rounded-lg border bg-card p-3 text-left text-muted-foreground text-sm transition-colors hover:border-foreground/20 hover:text-foreground"
-                    key={s}
-                    onClick={() => setInput(s)}
-                    type="button"
-                  >
-                    {s}
-                  </button>
-                ))}
-              </div>
-            </div>
-          ) : (
-            <div className="flex flex-col gap-6">
-              {messages
-                .filter((msg) => getMessageText(msg) || msg.role === "user")
-                .map((msg) => (
-                  <ChatMessage
-                    key={msg.id}
-                    message={msg}
-                    references={getReferencesForMessage(msg)}
-                  />
-                ))}
-              {isLoading && (
-                <div className="flex gap-3">
-                  <Avatar className="mt-1 size-7 shrink-0">
-                    <AvatarFallback className="bg-primary text-primary-foreground text-xs">
-                      <Sparkles className="size-3.5" />
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="rounded-2xl border bg-card px-4 py-3 text-sm">
-                    <div className="flex items-center gap-2 text-muted-foreground">
-                      <div className="flex gap-1">
-                        <span className="size-1.5 animate-bounce rounded-full bg-current [animation-delay:0ms]" />
-                        <span className="size-1.5 animate-bounce rounded-full bg-current [animation-delay:150ms]" />
-                        <span className="size-1.5 animate-bounce rounded-full bg-current [animation-delay:300ms]" />
-                      </div>
-                      Searching curriculum...
+          <div className="flex flex-col gap-6">
+            {messages
+              .filter((msg) => getMessageText(msg) || msg.role === "user")
+              .map((msg) => (
+                <ChatMessage
+                  key={msg.id}
+                  message={msg}
+                  references={getReferencesForMessage(msg)}
+                />
+              ))}
+            {isLoading && (
+              <div className="flex gap-3">
+                <Avatar className="mt-1 size-7 shrink-0">
+                  <AvatarFallback className="bg-primary text-primary-foreground text-xs">
+                    <Sparkles className="size-3.5" />
+                  </AvatarFallback>
+                </Avatar>
+                <div className="rounded-2xl border bg-card px-4 py-3 text-sm">
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <div className="flex gap-1">
+                      <span className="size-1.5 animate-bounce rounded-full bg-current [animation-delay:0ms]" />
+                      <span className="size-1.5 animate-bounce rounded-full bg-current [animation-delay:150ms]" />
+                      <span className="size-1.5 animate-bounce rounded-full bg-current [animation-delay:300ms]" />
                     </div>
+                    Searching curriculum...
                   </div>
                 </div>
-              )}
-            </div>
-          )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 

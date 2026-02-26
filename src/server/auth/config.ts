@@ -24,15 +24,13 @@ declare module "next-auth" {
   interface Session extends DefaultSession {
     user: {
       id: string;
-      // ...other properties
-      // role: UserRole;
+      isAdmin: boolean;
     } & DefaultSession["user"];
   }
 
-  // interface User {
-  //   // ...other properties
-  //   // role: UserRole;
-  // }
+  interface User {
+    isAdmin?: boolean;
+  }
 }
 
 /**
@@ -71,7 +69,12 @@ export const authConfig = {
         const valid = await compare(parsed.data.password, user.passwordHash);
         if (!valid) return null;
 
-        return { id: user.id, email: user.email, name: user.name };
+        return {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          isAdmin: user.isAdmin,
+        };
       },
     }),
   ],
@@ -86,6 +89,7 @@ export const authConfig = {
     jwt: ({ token, user }) => {
       if (user) {
         token.id = user.id;
+        token.isAdmin = user.isAdmin ?? false;
       }
       return token;
     },
@@ -94,6 +98,7 @@ export const authConfig = {
       user: {
         ...session.user,
         id: token.id as string,
+        isAdmin: (token.isAdmin as boolean) ?? false,
       },
     }),
   },

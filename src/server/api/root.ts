@@ -1,5 +1,8 @@
 import { authRouter } from "@/server/api/routers/auth";
 import { postRouter } from "@/server/api/routers/post";
+import { chatRouter } from "@/server/api/routers/chat";
+import { documentRouter } from "@/server/api/routers/document";
+import { userRouter } from "@/server/api/routers/user";
 import { createCallerFactory, createTRPCRouter } from "@/server/api/trpc";
 
 /**
@@ -10,6 +13,9 @@ import { createCallerFactory, createTRPCRouter } from "@/server/api/trpc";
 export const appRouter = createTRPCRouter({
   auth: authRouter,
   post: postRouter,
+  chat: chatRouter,
+  document: documentRouter,
+  user: userRouter,
 });
 
 // export type definition of API
