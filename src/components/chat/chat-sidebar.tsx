@@ -252,17 +252,18 @@ function SidebarContent({
               {(conversations ?? []).map((chat) => {
                 const isActive = pathname === `/chat/${chat.id}`;
                 return (
-                  <div
+                  <Link
+                    href={`/chat/${chat.id}`}
                     className={cn(
-                      "group flex items-center justify-between rounded-md px-2 py-1.5 text-sm transition-colors cursor-pointer",
+                      "group flex items-center justify-between rounded-md px-2 py-1.5 text-sm transition-colors min-w-0",
                       isActive
                         ? "bg-sidebar-accent font-medium text-sidebar-foreground"
                         : "text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground",
                     )}
                     key={chat.id}
-                    onClick={() => router.push(`/chat/${chat.id}`)}
+                    prefetch={true}
                   >
-                    <span className="truncate">{chat.title ?? "Untitled"}</span>
+                    <span className="min-w-0 flex-1 truncate">{chat.title ?? "Untitled"}</span>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button
@@ -320,7 +321,7 @@ function SidebarContent({
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
-                  </div>
+                  </Link>
                 );
               })}
               {(conversations ?? []).length === 0 && (
@@ -352,11 +353,11 @@ function SidebarContent({
                 </AvatarFallback>
               </Avatar>
               {!collapsed && (
-                <div className="flex flex-col items-start text-left">
-                  <span className="font-medium text-xs">
+                <div className="flex min-w-0 flex-1 flex-col items-start text-left">
+                  <span className="w-full truncate font-medium text-xs">
                     {profile?.name ?? "User"}
                   </span>
-                  <span className="text-sidebar-foreground/50 text-xs">
+                  <span className="w-full truncate text-sidebar-foreground/50 text-xs">
                     {profile?.email ?? ""}
                   </span>
                 </div>

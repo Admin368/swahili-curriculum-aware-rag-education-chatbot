@@ -25,6 +25,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { SUBJECTS, LEVELS } from "@/lib/constants";
+import { Input } from "@/components/ui/input";
 
 interface Flashcard {
   id: string;
@@ -176,25 +178,43 @@ export default function FlashcardsPage() {
               <div className="mt-8 grid w-full max-w-sm gap-4">
                 <div className="flex flex-col gap-2">
                   <label className="font-medium text-foreground text-sm">
-                    Topic
+                    Subject
                   </label>
-                  <Select defaultValue="photosynthesis">
+                  <Select defaultValue={SUBJECTS[0]}>
                     <SelectTrigger>
-                      <SelectValue placeholder="Select topic" />
+                      <SelectValue placeholder="Select subject" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="photosynthesis">
-                        Photosynthesis
-                      </SelectItem>
-                      <SelectItem value="cellular-respiration">
-                        Cellular Respiration
-                      </SelectItem>
-                      <SelectItem value="cell-division">
-                        Cell Division
-                      </SelectItem>
-                      <SelectItem value="genetics">Genetics</SelectItem>
+                      {SUBJECTS.map((s) => (
+                        <SelectItem key={s} value={s}>{s}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
+                </div>
+
+                <div className="flex flex-col gap-2">
+                  <label className="font-medium text-foreground text-sm">
+                    Level
+                  </label>
+                  <Select defaultValue={LEVELS[0]}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select level" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {LEVELS.map((l) => (
+                        <SelectItem key={l} value={l}>{l}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="flex flex-col gap-2">
+                  <label className="font-medium text-foreground text-sm">
+                    Topic / Custom Prompt
+                  </label>
+                  <Input
+                    placeholder="e.g. Photosynthesis, Ngoni migration..."
+                  />
                 </div>
 
                 <div className="flex flex-col gap-2">

@@ -89,7 +89,7 @@ export default function SummarizerPage() {
       </header>
 
       <ScrollArea className="flex-1">
-        <div className="mx-auto max-w-2xl px-6 py-8">
+        <div className="mx-auto max-w-4xl px-6 py-8">
           {!generated ? (
             /* Setup */
             <div className="flex flex-col items-center pt-12 text-center">
@@ -104,16 +104,16 @@ export default function SummarizerPage() {
                 and generate a structured summary.
               </p>
 
-              <div className="mt-8 grid w-full max-w-sm gap-4">
+              <div className="mt-8 grid w-full gap-4">
                 <div className="flex flex-col gap-2">
                   <label className="font-medium text-foreground text-sm">
                     Text to Summarize
                   </label>
                   <Textarea
-                    className="min-h-40 resize-none"
+                    className="min-h-40 max-h-[50vh] resize-y"
                     onChange={(e) => setTextInput(e.target.value)}
                     placeholder="Paste your text here..."
-                    rows={6}
+                    rows={8}
                     value={textInput}
                   />
                 </div>

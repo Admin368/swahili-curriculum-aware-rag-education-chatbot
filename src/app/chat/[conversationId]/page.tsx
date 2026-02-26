@@ -343,14 +343,36 @@ export default function ConversationPage() {
 
   if (loadingConversation) {
     return (
-      <div className="flex h-full items-center justify-center">
-        <div className="flex items-center gap-2 text-muted-foreground text-sm">
-          <div className="flex gap-1">
-            <span className="size-1.5 animate-bounce rounded-full bg-current [animation-delay:0ms]" />
-            <span className="size-1.5 animate-bounce rounded-full bg-current [animation-delay:150ms]" />
-            <span className="size-1.5 animate-bounce rounded-full bg-current [animation-delay:300ms]" />
+      <div className="flex h-full flex-col">
+        {/* Header skeleton */}
+        <header className="flex h-14 shrink-0 items-center justify-between border-b px-6">
+          <div className="flex items-center gap-2 pl-10 md:pl-0">
+            <Badge className="gap-1" variant="secondary">
+              <Sparkles className="size-3" />
+              Loading...
+            </Badge>
           </div>
-          Loading conversation...
+        </header>
+
+        {/* Skeleton messages */}
+        <div className="flex-1 overflow-y-auto">
+          <div className="mx-auto max-w-3xl px-6 py-6">
+            <div className="flex flex-col gap-6">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className={cn("flex gap-3", i % 2 === 1 && "justify-end")}>
+                  <div className={cn("h-4 animate-pulse rounded-2xl bg-muted", i % 2 === 1 ? "w-48" : "w-72")} />
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Input skeleton */}
+        <div className="shrink-0 border-t bg-background px-6 py-4">
+          <div className="mx-auto flex max-w-3xl items-end gap-2">
+            <div className="h-10 flex-1 animate-pulse rounded-md bg-muted" />
+            <div className="size-10 animate-pulse rounded-md bg-muted" />
+          </div>
         </div>
       </div>
     );

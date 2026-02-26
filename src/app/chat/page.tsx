@@ -13,6 +13,7 @@ import {
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
+import { useRouter } from "next/navigation";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -202,6 +203,7 @@ const suggestions = [
 ];
 
 export default function GeneralChatPage() {
+  const router = useRouter();
   const [subject, setSubject] = useState<string>("");
   const [level, setLevel] = useState<string>("");
   const [input, setInput] = useState("");
@@ -258,6 +260,9 @@ export default function GeneralChatPage() {
           if (conv) {
             activeConvId = conv.id;
             setConversationId(conv.id);
+
+            // Navigate to the conversation URL so messages persist
+            router.replace(`/chat/${conv.id}`);
 
             // Auto-title from first message
             void autoTitle.mutateAsync({

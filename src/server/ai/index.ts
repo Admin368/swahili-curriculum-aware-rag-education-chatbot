@@ -1,6 +1,7 @@
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { createOpenAI } from "@ai-sdk/openai";
 import { env } from "@/env";
+import { MODELS } from "@/lib/constants";
 
 /**
  * OpenRouter provider for chat generation (gpt-4o-mini).
@@ -11,7 +12,7 @@ export const openrouter = createOpenRouter({
 });
 
 /** Primary chat model — cost-effective with good multilingual (Swahili/English) support */
-export const chatModel = openrouter("openai/gpt-4o-mini");
+export const chatModel = openrouter(MODELS["gpt_4o_mini"].key);
 
 /**
  * OpenAI provider for embeddings (text-embedding-3-small).
