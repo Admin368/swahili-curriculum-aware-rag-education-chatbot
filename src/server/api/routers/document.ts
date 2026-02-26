@@ -7,6 +7,7 @@ import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
 import { documents, chunks, users } from "@/server/db/schema";
 import { generateEmbeddings } from "@/server/ai/embedding";
 import { splitTextIntoChunks } from "@/lib/chunker";
+import { PDFParse } from "pdf-parse";
 
 // ---------------------------------------------------------------------------
 // Admin guard middleware
@@ -150,15 +151,9 @@ export const documentRouter = createTRPCRouter({
             doc.mimeType === "application/pdf" ||
             doc.filename.endsWith(".pdf")
           ) {
-            // Dynamic import for pdf-parse (CommonJS module)
-            const pdfParseModule = await import("pdf-parse");
-            const pdfParse = (
-              pdfParseModule as unknown as {
-                default: (buf: Buffer) => Promise<{ text: string }>;
-              }
-            ).default;
-            const parsed = await pdfParse(buffer);
-            fullText = parsed.text;
+            const pdfDoc = new PDFParse({ data: buffer });
+            const result = await pdfDoc.getText();
+            fullText = result.text;
           } else {
             // Plain text / other
             fullText = buffer.toString("utf-8");

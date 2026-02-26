@@ -1,11 +1,11 @@
 "use client";
 
 import {
-  BookOpen,
   CheckCircle2,
   ChevronRight,
   FileText,
   FlaskConical,
+  Loader2,
   RotateCcw,
   XCircle,
 } from "lucide-react";
@@ -24,6 +24,8 @@ import {
 import { cn } from "@/lib/utils";
 import { SUBJECTS, LEVELS } from "@/lib/constants";
 import { Input } from "@/components/ui/input";
+import { api } from "@/trpc/react";
+import { toast } from "sonner";
 
 interface QuizQuestion {
   id: string;
@@ -34,58 +36,9 @@ interface QuizQuestion {
   source: string;
 }
 
-const mockQuestions: QuizQuestion[] = [
-  {
-    id: "1",
-    question: "What is the primary pigment involved in photosynthesis?",
-    options: ["Carotenoid", "Chlorophyll a", "Xanthophyll", "Phycocyanin"],
-    correctIndex: 1,
-    explanation:
-      "Chlorophyll a is the primary photosynthetic pigment in plants. It absorbs light most efficiently in the blue and red wavelengths and is directly involved in the light reactions.",
-    source: "Biology 101 - Chapter 8, Page 145",
-  },
-  {
-    id: "2",
-    question: "Where does the Calvin Cycle take place?",
-    options: [
-      "Thylakoid membrane",
-      "Cytoplasm",
-      "Stroma",
-      "Mitochondrial matrix",
-    ],
-    correctIndex: 2,
-    explanation:
-      "The Calvin Cycle (light-independent reactions) occurs in the stroma of the chloroplast, where CO2 is fixed into organic molecules using ATP and NADPH produced by the light reactions.",
-    source: "Lecture Notes - Week 5, Slide 28",
-  },
-  {
-    id: "3",
-    question:
-      "Which molecule is the final electron acceptor in the light reactions?",
-    options: ["O2", "NADP+", "FAD", "CO2"],
-    correctIndex: 1,
-    explanation:
-      "NADP+ is the final electron acceptor in the light-dependent reactions of photosynthesis. It accepts electrons and hydrogen ions to become NADPH, which is used in the Calvin Cycle.",
-    source: "Campbell Biology, 12th Edition - Chapter 10",
-  },
-  {
-    id: "4",
-    question: "What is the net equation for photosynthesis?",
-    options: [
-      "6CO2 + 6H2O -> C6H12O6 + 6O2",
-      "C6H12O6 + 6O2 -> 6CO2 + 6H2O",
-      "6CO2 + 12H2O -> C6H12O6 + 6O2 + 6H2O",
-      "CO2 + H2O -> CH2O + O2",
-    ],
-    correctIndex: 2,
-    explanation:
-      "The complete net equation accounts for the 12 water molecules consumed, with 6 water molecules produced as a byproduct along with glucose and oxygen.",
-    source: "Biology 101 - Chapter 8, Page 148",
-  },
-];
-
 export default function QuizPage() {
   const [quizStarted, setQuizStarted] = useState(false);
+  const [questions, setQuestions] = useState<QuizQuestion[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
   const [showExplanation, setShowExplanation] = useState(false);
@@ -93,9 +46,36 @@ export default function QuizPage() {
   const [answeredCount, setAnsweredCount] = useState(0);
   const [quizComplete, setQuizComplete] = useState(false);
 
-  const currentQuestion = mockQuestions[currentIndex];
+  // Form state
+  const [subject, setSubject] = useState<string>(SUBJECTS[0]);
+  const [level, setLevel] = useState<string>(LEVELS[0]);
+  const [topic, setTopic] = useState("");
+  const [difficulty, setDifficulty] = useState<"easy" | "medium" | "hard">(
+    "medium",
+  );
+  const [questionCount, setQuestionCount] = useState("4");
+
+  const generateQuiz = api.chat.generateQuiz.useMutation({
+    onSuccess: (data) => {
+      setQuestions(data);
+      setCurrentIndex(0);
+      setSelectedAnswer(null);
+      setShowExplanation(false);
+      setScore(0);
+      setAnsweredCount(0);
+      setQuizComplete(false);
+      setQuizStarted(true);
+    },
+    onError: (error) => {
+      toast.error(error.message || "Failed to generate quiz");
+    },
+  });
+
+  const currentQuestion = questions[currentIndex];
   const progress =
-    ((currentIndex + (showExplanation ? 1 : 0)) / mockQuestions.length) * 100;
+    questions.length > 0
+      ? ((currentIndex + (showExplanation ? 1 : 0)) / questions.length) * 100
+      : 0;
 
   const handleAnswer = (index: number) => {
     if (showExplanation) return;
@@ -108,7 +88,7 @@ export default function QuizPage() {
   };
 
   const handleNext = () => {
-    if (currentIndex < mockQuestions.length - 1) {
+    if (currentIndex < questions.length - 1) {
       setCurrentIndex((i) => i + 1);
       setSelectedAnswer(null);
       setShowExplanation(false);
@@ -118,6 +98,7 @@ export default function QuizPage() {
   };
 
   const handleRestart = () => {
+    setQuestions([]);
     setCurrentIndex(0);
     setSelectedAnswer(null);
     setShowExplanation(false);
@@ -125,6 +106,20 @@ export default function QuizPage() {
     setAnsweredCount(0);
     setQuizComplete(false);
     setQuizStarted(false);
+  };
+
+  const handleGenerate = () => {
+    if (!topic.trim()) {
+      toast.error("Please enter a topic");
+      return;
+    }
+    generateQuiz.mutate({
+      subject,
+      level,
+      topic: topic.trim(),
+      difficulty,
+      count: parseInt(questionCount),
+    });
   };
 
   return (
@@ -140,7 +135,7 @@ export default function QuizPage() {
         {quizStarted && !quizComplete && (
           <div className="flex items-center gap-3">
             <span className="text-muted-foreground text-xs">
-              {currentIndex + 1} of {mockQuestions.length}
+              {currentIndex + 1} of {questions.length}
             </span>
             <Badge className="text-xs" variant="outline">
               Score: {score}/{answeredCount}
@@ -170,7 +165,7 @@ export default function QuizPage() {
                   <label className="font-medium text-foreground text-sm">
                     Subject
                   </label>
-                  <Select defaultValue={SUBJECTS[0]}>
+                  <Select value={subject} onValueChange={(v) => setSubject(v)}>
                     <SelectTrigger>
                       <SelectValue placeholder="Select subject" />
                     </SelectTrigger>
@@ -188,7 +183,7 @@ export default function QuizPage() {
                   <label className="font-medium text-foreground text-sm">
                     Level
                   </label>
-                  <Select defaultValue={LEVELS[0]}>
+                  <Select value={level} onValueChange={(v) => setLevel(v)}>
                     <SelectTrigger>
                       <SelectValue placeholder="Select level" />
                     </SelectTrigger>
@@ -206,14 +201,23 @@ export default function QuizPage() {
                   <label className="font-medium text-foreground text-sm">
                     Topic / Custom Prompt
                   </label>
-                  <Input placeholder="e.g. Photosynthesis, Ngoni migration..." />
+                  <Input
+                    placeholder="e.g. Photosynthesis, Ngoni migration..."
+                    value={topic}
+                    onChange={(e) => setTopic(e.target.value)}
+                  />
                 </div>
 
                 <div className="flex flex-col gap-2">
                   <label className="font-medium text-foreground text-sm">
                     Difficulty
                   </label>
-                  <Select defaultValue="medium">
+                  <Select
+                    value={difficulty}
+                    onValueChange={(v) =>
+                      setDifficulty(v as "easy" | "medium" | "hard")
+                    }
+                  >
                     <SelectTrigger>
                       <SelectValue placeholder="Select difficulty" />
                     </SelectTrigger>
@@ -229,7 +233,10 @@ export default function QuizPage() {
                   <label className="font-medium text-foreground text-sm">
                     Number of Questions
                   </label>
-                  <Select defaultValue="4">
+                  <Select
+                    value={questionCount}
+                    onValueChange={setQuestionCount}
+                  >
                     <SelectTrigger>
                       <SelectValue placeholder="Select count" />
                     </SelectTrigger>
@@ -241,9 +248,22 @@ export default function QuizPage() {
                   </Select>
                 </div>
 
-                <Button className="mt-2" onClick={() => setQuizStarted(true)}>
-                  Generate Quiz
-                  <ChevronRight className="size-4" />
+                <Button
+                  className="mt-2"
+                  onClick={handleGenerate}
+                  disabled={generateQuiz.isPending || !topic.trim()}
+                >
+                  {generateQuiz.isPending ? (
+                    <>
+                      <Loader2 className="size-4 animate-spin" />
+                      Generating...
+                    </>
+                  ) : (
+                    <>
+                      Generate Quiz
+                      <ChevronRight className="size-4" />
+                    </>
+                  )}
                 </Button>
               </div>
             </div>
@@ -257,16 +277,16 @@ export default function QuizPage() {
                 Quiz Complete
               </h2>
               <p className="mt-2 text-muted-foreground text-sm">
-                You scored {score} out of {mockQuestions.length}
+                You scored {score} out of {questions.length}
               </p>
 
               <div className="mt-6 w-full max-w-xs">
                 <Progress
                   className="h-3"
-                  value={(score / mockQuestions.length) * 100}
+                  value={(score / questions.length) * 100}
                 />
                 <p className="mt-2 font-semibold text-2xl text-foreground">
-                  {Math.round((score / mockQuestions.length) * 100)}%
+                  {Math.round((score / questions.length) * 100)}%
                 </p>
               </div>
 
@@ -284,7 +304,7 @@ export default function QuizPage() {
               <Progress className="mb-8 h-1.5" value={progress} />
 
               <p className="font-medium text-muted-foreground text-xs">
-                Question {currentIndex + 1} of {mockQuestions.length}
+                Question {currentIndex + 1} of {questions.length}
               </p>
               <h3 className="mt-2 font-semibold text-foreground text-lg leading-relaxed">
                 {currentQuestion?.question}
@@ -346,7 +366,7 @@ export default function QuizPage() {
                     <span>{currentQuestion?.source}</span>
                   </div>
                   <Button className="mt-4" onClick={handleNext}>
-                    {currentIndex < mockQuestions.length - 1
+                    {currentIndex < questions.length - 1
                       ? "Next Question"
                       : "See Results"}
                     <ChevronRight className="size-4" />

@@ -115,7 +115,7 @@ function SidebarContent({
       </div>
 
       {/* Scrollable middle section */}
-      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         {/* New chat button */}
         <div className="shrink-0 px-3">
           {collapsed ? (

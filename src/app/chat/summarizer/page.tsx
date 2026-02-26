@@ -6,6 +6,7 @@ import {
   Download,
   FileText,
   List,
+  Loader2,
   Sparkles,
 } from "lucide-react";
 import { useState } from "react";
@@ -14,45 +15,86 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { api } from "@/trpc/react";
+import { toast } from "sonner";
 
-interface SummarySection {
-  heading: string;
-  content: string;
-}
-
-const mockSummary: SummarySection[] = [
-  {
-    heading: "Overview",
-    content:
-      "Photosynthesis is the biological process by which light energy is converted into chemical energy, storing it as glucose. This process is critical for life on Earth, providing both oxygen and the organic compounds that form the base of most food chains.",
-  },
-  {
-    heading: "Light-Dependent Reactions",
-    content:
-      "These reactions occur in the thylakoid membranes and require direct light input. Water molecules are split (photolysis), releasing O2 as a byproduct. The energy from light drives the electron transport chain, generating ATP via chemiosmosis and reducing NADP+ to NADPH. Photosystem II (P680) and Photosystem I (P700) work in series to transfer electrons.",
-  },
-  {
-    heading: "Calvin Cycle (Light-Independent Reactions)",
-    content:
-      "Taking place in the stroma, the Calvin Cycle uses ATP and NADPH from the light reactions to fix CO2 into organic molecules. The enzyme RuBisCO catalyzes the first step, combining CO2 with ribulose bisphosphate (RuBP). Through a series of reductions and regeneration steps, the cycle produces glyceraldehyde-3-phosphate (G3P), which can be used to synthesize glucose.",
-  },
-  {
-    heading: "Key Relationships",
-    content:
-      "Photosynthesis and cellular respiration are complementary processes. The products of photosynthesis (glucose and O2) serve as reactants for cellular respiration, which produces CO2 and H2O - the reactants for photosynthesis. This creates a closed metabolic loop essential for ecosystem energy balance.",
-  },
-  {
-    heading: "Key Terms",
-    content:
-      "Chlorophyll: Primary photosynthetic pigment. Stroma: Fluid interior of the chloroplast. Thylakoid: Membrane-bound compartments inside chloroplasts. RuBisCO: Enzyme that fixes CO2. Chemiosmosis: ATP production driven by H+ gradient. Photophosphorylation: Light-driven ATP synthesis.",
-  },
-];
+type SummaryResult =
+  | {
+      style: "structured";
+      title: string;
+      sections: { heading: string; content: string }[];
+    }
+  | {
+      style: "paragraph";
+      title: string;
+      summary: string;
+    };
 
 export default function SummarizerPage() {
   const [generated, setGenerated] = useState(false);
   const [customInput, setCustomInput] = useState("");
   const [textInput, setTextInput] = useState("");
-  const [summaryStyle, setSummaryStyle] = useState("structured");
+  const [summaryStyle, setSummaryStyle] = useState<"structured" | "paragraph">(
+    "structured",
+  );
+  const [summaryResult, setSummaryResult] = useState<SummaryResult | null>(
+    null,
+  );
+
+  const generateSummary = api.chat.generateSummary.useMutation({
+    onSuccess: (data) => {
+      setSummaryResult(data as SummaryResult);
+      setGenerated(true);
+    },
+    onError: (error) => {
+      toast.error(error.message || "Failed to generate summary");
+    },
+  });
+
+  const handleGenerate = () => {
+    if (!textInput.trim()) return;
+    generateSummary.mutate({
+      text: textInput.trim(),
+      style: summaryStyle,
+      focusArea: customInput.trim() || undefined,
+    });
+  };
+
+  const getSummaryText = (): string => {
+    if (!summaryResult) return "";
+    if (summaryResult.style === "structured") {
+      return [
+        `# ${summaryResult.title}`,
+        "",
+        ...summaryResult.sections.flatMap((s) => [
+          `## ${s.heading}`,
+          s.content,
+          "",
+        ]),
+      ].join("\n");
+    }
+    return `# ${summaryResult.title}\n\n${summaryResult.summary}`;
+  };
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(getSummaryText());
+      toast.success("Summary copied to clipboard");
+    } catch {
+      toast.error("Failed to copy");
+    }
+  };
+
+  const handleExport = () => {
+    const text = getSummaryText();
+    const blob = new Blob([text], { type: "text/markdown" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${summaryResult?.title ?? "summary"}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -71,6 +113,7 @@ export default function SummarizerPage() {
               className="gap-1.5 text-xs"
               size="sm"
               variant="ghost"
+              onClick={() => void handleCopy()}
             >
               <Copy className="size-3.5" />
               Copy
@@ -80,6 +123,7 @@ export default function SummarizerPage() {
               className="gap-1.5 text-xs"
               size="sm"
               variant="ghost"
+              onClick={handleExport}
             >
               <Download className="size-3.5" />
               Export
@@ -168,11 +212,20 @@ export default function SummarizerPage() {
 
                 <Button
                   className="mt-2"
-                  disabled={!textInput.trim()}
-                  onClick={() => setGenerated(true)}
+                  disabled={!textInput.trim() || generateSummary.isPending}
+                  onClick={handleGenerate}
                 >
-                  <Sparkles className="size-4" />
-                  Generate Summary
+                  {generateSummary.isPending ? (
+                    <>
+                      <Loader2 className="size-4 animate-spin" />
+                      Generating...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="size-4" />
+                      Generate Summary
+                    </>
+                  )}
                 </Button>
               </div>
             </div>
@@ -182,22 +235,30 @@ export default function SummarizerPage() {
               <div className="mb-6 flex items-center gap-2">
                 <Sparkles className="size-4 text-muted-foreground" />
                 <h2 className="font-semibold text-foreground text-lg">
-                  Photosynthesis Summary
+                  {summaryResult?.title ?? "Summary"}
                 </h2>
               </div>
 
-              <div className="flex flex-col gap-6">
-                {mockSummary.map((section, i) => (
-                  <div className="rounded-xl border bg-card p-5" key={i}>
-                    <h3 className="font-semibold text-foreground text-sm">
-                      {section.heading}
-                    </h3>
-                    <p className="mt-2 text-muted-foreground text-sm leading-relaxed">
-                      {section.content}
-                    </p>
-                  </div>
-                ))}
-              </div>
+              {summaryResult?.style === "structured" ? (
+                <div className="flex flex-col gap-6">
+                  {summaryResult.sections.map((section, i) => (
+                    <div className="rounded-xl border bg-card p-5" key={i}>
+                      <h3 className="font-semibold text-foreground text-sm">
+                        {section.heading}
+                      </h3>
+                      <p className="mt-2 text-muted-foreground text-sm leading-relaxed">
+                        {section.content}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              ) : summaryResult?.style === "paragraph" ? (
+                <div className="rounded-xl border bg-card p-5">
+                  <p className="text-muted-foreground text-sm leading-relaxed">
+                    {summaryResult.summary}
+                  </p>
+                </div>
+              ) : null}
 
               <div className="mt-6 flex justify-center">
                 <Button
@@ -205,6 +266,7 @@ export default function SummarizerPage() {
                     setGenerated(false);
                     setTextInput("");
                     setCustomInput("");
+                    setSummaryResult(null);
                   }}
                   variant="outline"
                 >

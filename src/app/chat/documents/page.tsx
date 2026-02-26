@@ -5,6 +5,7 @@ import {
   CheckCircle2,
   Clock,
   Cpu,
+  ExternalLink,
   Eye,
   FileText,
   FolderOpen,
@@ -481,6 +482,18 @@ export default function DocumentsPage() {
                             <Eye className="size-3.5" />
                             View Details
                           </DropdownMenuItem>
+                          {doc.blobUrl && (
+                            <DropdownMenuItem asChild>
+                              <a
+                                href={doc.blobUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                              >
+                                <ExternalLink className="size-3.5" />
+                                View PDF
+                              </a>
+                            </DropdownMenuItem>
+                          )}
                           {doc.status === "error" && (
                             <DropdownMenuItem
                               onClick={() => {
@@ -615,6 +628,18 @@ export default function DocumentsPage() {
             </div>
           )}
           <DialogFooter>
+            {detailDoc?.blobUrl && (
+              <Button asChild variant="default" className="gap-1.5">
+                <a
+                  href={detailDoc.blobUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <ExternalLink className="size-4" />
+                  View PDF
+                </a>
+              </Button>
+            )}
             <Button onClick={() => setDetailDocId(null)} variant="outline">
               Close
             </Button>

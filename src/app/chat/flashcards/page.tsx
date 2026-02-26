@@ -8,6 +8,7 @@ import {
   EyeOff,
   FileText,
   Layers,
+  Loader2,
   RotateCcw,
   Shuffle,
   XCircle,
@@ -27,6 +28,8 @@ import {
 import { cn } from "@/lib/utils";
 import { SUBJECTS, LEVELS } from "@/lib/constants";
 import { Input } from "@/components/ui/input";
+import { api } from "@/trpc/react";
+import { toast } from "sonner";
 
 interface Flashcard {
   id: string;
@@ -36,62 +39,36 @@ interface Flashcard {
   mastered: boolean;
 }
 
-const mockFlashcards: Flashcard[] = [
-  {
-    id: "1",
-    front: "What is the role of chlorophyll in photosynthesis?",
-    back: "Chlorophyll absorbs light energy (primarily red and blue wavelengths) and converts it into chemical energy. It is located in the thylakoid membranes of chloroplasts and is essential for the light-dependent reactions.",
-    source: "Biology 101 - Chapter 8",
-    mastered: false,
-  },
-  {
-    id: "2",
-    front:
-      "Define the term 'carbon fixation' in the context of the Calvin Cycle.",
-    back: "Carbon fixation is the process by which CO2 from the atmosphere is incorporated into organic molecules (specifically, ribulose bisphosphate) by the enzyme RuBisCO. This is the first step of the Calvin Cycle.",
-    source: "Lecture Notes - Week 5",
-    mastered: false,
-  },
-  {
-    id: "3",
-    front: "What are the products of the light-dependent reactions?",
-    back: "The light-dependent reactions produce ATP, NADPH, and O2. ATP and NADPH are used as energy carriers in the Calvin Cycle, while O2 is released as a byproduct of water splitting (photolysis).",
-    source: "Campbell Biology - Chapter 10",
-    mastered: false,
-  },
-  {
-    id: "4",
-    front: "How does chemiosmosis work in chloroplasts?",
-    back: "In chloroplasts, the electron transport chain pumps H+ ions into the thylakoid lumen, creating a concentration gradient. H+ ions flow back through ATP synthase, which uses this flow to phosphorylate ADP into ATP (photophosphorylation).",
-    source: "Biology 101 - Chapter 8",
-    mastered: false,
-  },
-  {
-    id: "5",
-    front: "What is the difference between Photosystem I and Photosystem II?",
-    back: "Photosystem II (P680) absorbs light at 680nm and splits water to replace lost electrons. Photosystem I (P700) absorbs at 700nm and reduces NADP+ to NADPH. PS II comes first in the electron transport chain despite its numbering.",
-    source: "Lecture Notes - Week 5",
-    mastered: false,
-  },
-  {
-    id: "6",
-    front: "What is photorespiration and why is it a problem?",
-    back: "Photorespiration occurs when RuBisCO fixes O2 instead of CO2, producing a toxic 2-carbon compound. It wastes energy and reduces photosynthetic efficiency. C4 and CAM plants have evolved mechanisms to minimize it.",
-    source: "Campbell Biology - Chapter 10",
-    mastered: false,
-  },
-];
-
 export default function FlashcardsPage() {
   const [started, setStarted] = useState(false);
-  const [cards, setCards] = useState<Flashcard[]>(mockFlashcards);
+  const [cards, setCards] = useState<Flashcard[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [flipped, setFlipped] = useState(false);
   const [showSource, setShowSource] = useState(false);
 
+  // Form state
+  const [subject, setSubject] = useState<string>(SUBJECTS[0]);
+  const [level, setLevel] = useState<string>(LEVELS[0]);
+  const [topic, setTopic] = useState("");
+  const [cardCount, setCardCount] = useState("6");
+
+  const generateFlashcards = api.chat.generateFlashcards.useMutation({
+    onSuccess: (data) => {
+      setCards(data.map((c) => ({ ...c, mastered: false })));
+      setCurrentIndex(0);
+      setFlipped(false);
+      setShowSource(false);
+      setStarted(true);
+    },
+    onError: (error) => {
+      toast.error(error.message || "Failed to generate flashcards");
+    },
+  });
+
   const current = cards[currentIndex];
   const masteredCount = cards.filter((c) => c.mastered).length;
-  const progress = ((currentIndex + 1) / cards.length) * 100;
+  const progress =
+    cards.length > 0 ? ((currentIndex + 1) / cards.length) * 100 : 0;
 
   const handleNext = () => {
     if (currentIndex < cards.length - 1) {
@@ -125,11 +102,24 @@ export default function FlashcardsPage() {
   };
 
   const handleRestart = () => {
-    setCards(mockFlashcards.map((c) => ({ ...c, mastered: false })));
+    setCards([]);
     setCurrentIndex(0);
     setFlipped(false);
     setShowSource(false);
     setStarted(false);
+  };
+
+  const handleGenerate = () => {
+    if (!topic.trim()) {
+      toast.error("Please enter a topic");
+      return;
+    }
+    generateFlashcards.mutate({
+      subject,
+      level,
+      topic: topic.trim(),
+      count: parseInt(cardCount),
+    });
   };
 
   return (
@@ -180,7 +170,7 @@ export default function FlashcardsPage() {
                   <label className="font-medium text-foreground text-sm">
                     Subject
                   </label>
-                  <Select defaultValue={SUBJECTS[0]}>
+                  <Select value={subject} onValueChange={(v) => setSubject(v)}>
                     <SelectTrigger>
                       <SelectValue placeholder="Select subject" />
                     </SelectTrigger>
@@ -198,7 +188,7 @@ export default function FlashcardsPage() {
                   <label className="font-medium text-foreground text-sm">
                     Level
                   </label>
-                  <Select defaultValue={LEVELS[0]}>
+                  <Select value={level} onValueChange={(v) => setLevel(v)}>
                     <SelectTrigger>
                       <SelectValue placeholder="Select level" />
                     </SelectTrigger>
@@ -216,14 +206,18 @@ export default function FlashcardsPage() {
                   <label className="font-medium text-foreground text-sm">
                     Topic / Custom Prompt
                   </label>
-                  <Input placeholder="e.g. Photosynthesis, Ngoni migration..." />
+                  <Input
+                    placeholder="e.g. Photosynthesis, Ngoni migration..."
+                    value={topic}
+                    onChange={(e) => setTopic(e.target.value)}
+                  />
                 </div>
 
                 <div className="flex flex-col gap-2">
                   <label className="font-medium text-foreground text-sm">
                     Number of Cards
                   </label>
-                  <Select defaultValue="6">
+                  <Select value={cardCount} onValueChange={setCardCount}>
                     <SelectTrigger>
                       <SelectValue placeholder="Select count" />
                     </SelectTrigger>
@@ -235,9 +229,22 @@ export default function FlashcardsPage() {
                   </Select>
                 </div>
 
-                <Button className="mt-2" onClick={() => setStarted(true)}>
-                  Generate Flashcards
-                  <ChevronRight className="size-4" />
+                <Button
+                  className="mt-2"
+                  onClick={handleGenerate}
+                  disabled={generateFlashcards.isPending || !topic.trim()}
+                >
+                  {generateFlashcards.isPending ? (
+                    <>
+                      <Loader2 className="size-4 animate-spin" />
+                      Generating...
+                    </>
+                  ) : (
+                    <>
+                      Generate Flashcards
+                      <ChevronRight className="size-4" />
+                    </>
+                  )}
                 </Button>
               </div>
             </div>
@@ -253,7 +260,7 @@ export default function FlashcardsPage() {
               <button
                 aria-label={flipped ? "Show question" : "Show answer"}
                 className={cn(
-                  "group flex min-h-[280px] w-full cursor-pointer flex-col justify-center rounded-2xl border p-8 text-left transition-all hover:shadow-md",
+                  "group flex min-h-70 w-full cursor-pointer flex-col justify-center rounded-2xl border p-8 text-left transition-all hover:shadow-md",
                   flipped ? "bg-muted/30" : "bg-card",
                   current?.mastered && "border-accent",
                 )}
