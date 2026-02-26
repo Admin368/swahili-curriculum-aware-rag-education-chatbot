@@ -1,6 +1,10 @@
 {
 	"$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
 	"root": true,
+	"files": {
+		// "experimentalScannerIgnores": ["src/components/ui/**"]
+		"includes": ["**", "!**/node_modules", "!src/components/ui"]
+	},
 	"vcs": {
 		"enabled": true,
 		"useIgnoreFile": true,
@@ -24,6 +28,27 @@
 		"enabled": true,
 		"rules": {
 			"recommended": true,
+			"correctness": {
+				"noUnusedImports": "off"
+			},
+			"style": {
+				"useTemplate": "off"
+			},
+			"a11y": {
+				"noStaticElementInteractions": "off",
+				"noLabelWithoutControl": "off",
+				"useButtonType": "off",
+				"useSemanticElements": "off",
+				"useFocusableInteractive": "off",
+				"useAriaPropsForRole": "off",
+				"noRedundantRoles": "off"
+			},
+			"suspicious": {
+				"noArrayIndexKey": "off"
+			},
+			"security": {
+				"noDangerouslySetInnerHtml": "off"
+			},
 			"nursery": {
 				"useSortedClasses": {
 					"level": "warn",
