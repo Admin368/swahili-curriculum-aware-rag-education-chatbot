@@ -359,8 +359,16 @@ export default function ConversationPage() {
           <div className="mx-auto max-w-3xl px-6 py-6">
             <div className="flex flex-col gap-6">
               {[1, 2, 3].map((i) => (
-                <div key={i} className={cn("flex gap-3", i % 2 === 1 && "justify-end")}>
-                  <div className={cn("h-4 animate-pulse rounded-2xl bg-muted", i % 2 === 1 ? "w-48" : "w-72")} />
+                <div
+                  key={i}
+                  className={cn("flex gap-3", i % 2 === 1 && "justify-end")}
+                >
+                  <div
+                    className={cn(
+                      "h-4 animate-pulse rounded-2xl bg-muted",
+                      i % 2 === 1 ? "w-48" : "w-72",
+                    )}
+                  />
                 </div>
               ))}
             </div>

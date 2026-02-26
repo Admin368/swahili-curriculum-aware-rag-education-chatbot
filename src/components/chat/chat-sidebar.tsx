@@ -263,7 +263,9 @@ function SidebarContent({
                     key={chat.id}
                     prefetch={true}
                   >
-                    <span className="min-w-0 flex-1 truncate">{chat.title ?? "Untitled"}</span>
+                    <span className="min-w-0 flex-1 truncate">
+                      {chat.title ?? "Untitled"}
+                    </span>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button

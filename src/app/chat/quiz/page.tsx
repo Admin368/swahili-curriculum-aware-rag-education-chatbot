@@ -176,7 +176,9 @@ export default function QuizPage() {
                     </SelectTrigger>
                     <SelectContent>
                       {SUBJECTS.map((s) => (
-                        <SelectItem key={s} value={s}>{s}</SelectItem>
+                        <SelectItem key={s} value={s}>
+                          {s}
+                        </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -192,7 +194,9 @@ export default function QuizPage() {
                     </SelectTrigger>
                     <SelectContent>
                       {LEVELS.map((l) => (
-                        <SelectItem key={l} value={l}>{l}</SelectItem>
+                        <SelectItem key={l} value={l}>
+                          {l}
+                        </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -202,9 +206,7 @@ export default function QuizPage() {
                   <label className="font-medium text-foreground text-sm">
                     Topic / Custom Prompt
                   </label>
-                  <Input
-                    placeholder="e.g. Photosynthesis, Ngoni migration..."
-                  />
+                  <Input placeholder="e.g. Photosynthesis, Ngoni migration..." />
                 </div>
 
                 <div className="flex flex-col gap-2">
