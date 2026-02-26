@@ -8,3 +8,26 @@
 - [Drizzle](https://orm.drizzle.team)
 - [Tailwind CSS](https://tailwindcss.com)
 - [tRPC](https://trpc.io)
+
+- NodeJS
+
+## Commands
+### installing packages:
+`bash
+    pnpm install
+`
+
+### running development:
+`
+    pnpm dev
+`
+
+### running building:
+`
+    pnpm build
+`
+
+### running built version:
+`
+    pnpm start
+`
