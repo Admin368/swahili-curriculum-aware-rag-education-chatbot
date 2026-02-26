@@ -11,7 +11,7 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Swahili Chat - AI-Powered Learning Platform",
+  title: "Elimu - AI-Powered Learning Platform",
   description:
     "Curriculum-aware AI education chatbot with RAG-powered learning tools including quizzes, flashcards, and summaries.",
   icons: {

@@ -93,7 +93,7 @@ function SidebarContent({
             <div className="flex size-7 items-center justify-center rounded-lg bg-sidebar-primary">
               <BookOpen className="size-3.5 text-sidebar-primary-foreground" />
             </div>
-            <span className="font-semibold text-sm">Swahili Chat</span>
+            <span className="font-semibold text-sm">Elimu</span>
           </Link>
         )}
         {collapsed && (

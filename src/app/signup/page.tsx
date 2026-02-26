@@ -42,7 +42,7 @@ export default function SignUpPage() {
             <BookOpen className="size-4 text-primary" />
           </div>
           <span className="font-semibold text-lg text-primary-foreground">
-            Swahili Chat
+            Elimu
           </span>
         </Link>
         <div>
@@ -66,16 +66,14 @@ export default function SignUpPage() {
             <div className="flex size-8 items-center justify-center rounded-lg bg-primary">
               <BookOpen className="size-4 text-primary-foreground" />
             </div>
-            <span className="font-semibold text-foreground text-lg">
-              Swahili Chat
-            </span>
+            <span className="font-semibold text-foreground text-lg">Elimu</span>
           </Link>
 
           <h1 className="font-semibold text-2xl text-foreground">
             Create your account
           </h1>
           <p className="mt-1 text-muted-foreground text-sm">
-            Get started with your free Swahili Chat account.
+            Get started with your free Elimu account.
           </p>
 
           {error && (

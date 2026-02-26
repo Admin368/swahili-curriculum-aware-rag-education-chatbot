@@ -47,7 +47,7 @@ export default function SignInPage() {
             <BookOpen className="size-4 text-primary" />
           </div>
           <span className="font-semibold text-lg text-primary-foreground">
-            Swahili Chat
+            Elimu
           </span>
         </Link>
         <div>
@@ -71,9 +71,7 @@ export default function SignInPage() {
             <div className="flex size-8 items-center justify-center rounded-lg bg-primary">
               <BookOpen className="size-4 text-primary-foreground" />
             </div>
-            <span className="font-semibold text-foreground text-lg">
-              Swahili Chat
-            </span>
+            <span className="font-semibold text-foreground text-lg">Elimu</span>
           </Link>
 
           <h1 className="font-semibold text-2xl text-foreground">
