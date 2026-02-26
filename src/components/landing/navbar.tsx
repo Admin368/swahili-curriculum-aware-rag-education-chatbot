@@ -31,12 +31,12 @@ export function Navbar() {
           >
             How it Works
           </Link>
-          <Link
+          {/* <Link
             className="text-muted-foreground text-sm transition-colors hover:text-foreground"
             href="#pricing"
           >
             Pricing
-          </Link>
+          </Link> */}
         </div>
 
         <div className="hidden items-center gap-3 md:flex">

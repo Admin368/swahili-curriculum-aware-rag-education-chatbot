@@ -848,7 +848,7 @@ export default function BenchmarkPage() {
 
       {/* ---- Side-by-side panels ---- */}
       <div className="grid min-h-0 flex-1 grid-cols-2">
-        <div className="border-r">
+        <div className="h-full overflow-hidden border-r">
           <ModelPanel
             modelName={modelLeft}
             modelLabel={MODELS[modelLeft].label}
@@ -856,7 +856,7 @@ export default function BenchmarkPage() {
             isLoading={isLoadingLeft}
           />
         </div>
-        <div>
+        <div className="h-full overflow-hidden">
           <ModelPanel
             modelName={modelRight}
             modelLabel={MODELS[modelRight].label}
