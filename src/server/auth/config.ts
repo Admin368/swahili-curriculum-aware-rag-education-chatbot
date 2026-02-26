@@ -1,13 +1,17 @@
 import { DrizzleAdapter } from "@auth/drizzle-adapter";
+import { compare } from "bcryptjs";
+import { eq } from "drizzle-orm";
 import type { DefaultSession, NextAuthConfig } from "next-auth";
+import Credentials from "next-auth/providers/credentials";
 // import DiscordProvider from "next-auth/providers/discord";
+import { z } from "zod";
 
 import { db } from "@/server/db";
 import {
-	accounts,
-	sessions,
-	users,
-	verificationTokens,
+  accounts,
+  sessions,
+  users,
+  verificationTokens,
 } from "@/server/db/schema";
 
 /**
@@ -17,18 +21,18 @@ import {
  * @see https://next-auth.js.org/getting-started/typescript#module-augmentation
  */
 declare module "next-auth" {
-	interface Session extends DefaultSession {
-		user: {
-			id: string;
-			// ...other properties
-			// role: UserRole;
-		} & DefaultSession["user"];
-	}
+  interface Session extends DefaultSession {
+    user: {
+      id: string;
+      // ...other properties
+      // role: UserRole;
+    } & DefaultSession["user"];
+  }
 
-	// interface User {
-	//   // ...other properties
-	//   // role: UserRole;
-	// }
+  // interface User {
+  //   // ...other properties
+  //   // role: UserRole;
+  // }
 }
 
 /**
@@ -37,31 +41,60 @@ declare module "next-auth" {
  * @see https://next-auth.js.org/configuration/options
  */
 export const authConfig = {
-	providers: [
-		// DiscordProvider,
-		/**
-		 * ...add more providers here.
-		 *
-		 * Most other providers require a bit more work than the Discord provider. For example, the
-		 * GitHub provider requires you to add the `refresh_token_expires_in` field to the Account
-		 * model. Refer to the NextAuth.js docs for the provider you want to use. Example:
-		 *
-		 * @see https://next-auth.js.org/providers/github
-		 */
-	],
-	adapter: DrizzleAdapter(db, {
-		usersTable: users,
-		accountsTable: accounts,
-		sessionsTable: sessions,
-		verificationTokensTable: verificationTokens,
-	}),
-	callbacks: {
-		session: ({ session, user }) => ({
-			...session,
-			user: {
-				...session.user,
-				id: user.id,
-			},
-		}),
-	},
+  providers: [
+    // DiscordProvider,
+    /**
+     * ...add more OAuth providers here.
+     * @see https://next-auth.js.org/providers/github
+     */
+    Credentials({
+      credentials: {
+        email: { label: "Email", type: "email" },
+        password: { label: "Password", type: "password" },
+      },
+      authorize: async (credentials) => {
+        const parsed = z
+          .object({
+            email: z.string().email(),
+            password: z.string().min(1),
+          })
+          .safeParse(credentials);
+
+        if (!parsed.success) return null;
+
+        const user = await db.query.users.findFirst({
+          where: eq(users.email, parsed.data.email),
+        });
+
+        if (!user?.passwordHash) return null;
+
+        const valid = await compare(parsed.data.password, user.passwordHash);
+        if (!valid) return null;
+
+        return { id: user.id, email: user.email, name: user.name };
+      },
+    }),
+  ],
+  adapter: DrizzleAdapter(db, {
+    usersTable: users,
+    accountsTable: accounts,
+    sessionsTable: sessions,
+    verificationTokensTable: verificationTokens,
+  }),
+  session: { strategy: "jwt" },
+  callbacks: {
+    jwt: ({ token, user }) => {
+      if (user) {
+        token.id = user.id;
+      }
+      return token;
+    },
+    session: ({ session, token }) => ({
+      ...session,
+      user: {
+        ...session.user,
+        id: token.id as string,
+      },
+    }),
+  },
 } satisfies NextAuthConfig;

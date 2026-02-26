@@ -1,0 +1,2 @@
+ALTER TABLE "curriculum-aware-rag-education-chatbot_user" ADD COLUMN "passwordHash" varchar(255);--> statement-breakpoint
+ALTER TABLE "curriculum-aware-rag-education-chatbot_user" ADD CONSTRAINT "curriculum-aware-rag-education-chatbot_user_email_unique" UNIQUE("email");
