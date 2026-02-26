@@ -29,6 +29,7 @@ export async function POST(req: Request) {
     subject?: string;
     level?: string;
     model?: string;
+    benchmarkMode?: boolean;
   };
   const {
     messages: chatMessages,
@@ -36,6 +37,7 @@ export async function POST(req: Request) {
     subject,
     level,
     model: requestedModel,
+    benchmarkMode,
   } = body;
 
   // Resolve the model: use requested model key if valid, otherwise default
@@ -187,7 +189,8 @@ ${level ? `Current level context: ${level}` : ""}`;
 
     async onFinish({ text }) {
       // Persist assistant message to DB if we have a conversation
-      if (conversationId && text) {
+      // Skip for benchmark mode — benchmark page saves from the client side
+      if (conversationId && text && !benchmarkMode) {
         try {
           await db.insert(messages).values({
             conversationId,

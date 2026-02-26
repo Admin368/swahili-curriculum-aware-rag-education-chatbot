@@ -423,12 +423,19 @@ export default function BenchmarkPage() {
   const [level, setLevel] = useState<string>("");
   const [input, setInput] = useState("");
   const [isSending, setIsSending] = useState(false);
+  const [pendingMessage, setPendingMessage] = useState<string | null>(null);
 
   // Current benchmark record
   const [benchmarkId, setBenchmarkId] = useState<string | null>(null);
   const [convIdLeft, setConvIdLeft] = useState<string | null>(null);
   const [convIdRight, setConvIdRight] = useState<string | null>(null);
   const [initialised, setInitialised] = useState(false);
+
+  // Refs so onFinish closures always read the latest conv IDs
+  const convIdLeftRef = useRef<string | null>(null);
+  const convIdRightRef = useRef<string | null>(null);
+  convIdLeftRef.current = convIdLeft;
+  convIdRightRef.current = convIdRight;
 
   const createBenchmark = api.benchmark.create.useMutation();
   const addMessage = api.chat.addMessage.useMutation();
@@ -519,6 +526,7 @@ export default function BenchmarkPage() {
           subject: subject || undefined,
           level: level || undefined,
           model: MODELS[modelLeft].key,
+          benchmarkMode: true,
         },
       }),
     [subject, level, modelLeft, convIdLeft],
@@ -534,26 +542,51 @@ export default function BenchmarkPage() {
           subject: subject || undefined,
           level: level || undefined,
           model: MODELS[modelRight].key,
+          benchmarkMode: true,
         },
       }),
     [subject, level, modelRight, convIdRight],
   );
 
   const chatLeft = useChat({
-    id: `bench-left-${convIdLeft ?? "new"}`,
+    id: "bench-left",
     transport: transportLeft,
     messages: initialMessagesLeft.length > 0 ? initialMessagesLeft : undefined,
-    onFinish: () => {
+    onFinish: async ({ message }) => {
+      // Persist assistant response from client (reliable — refs always have latest IDs)
+      const leftId = convIdLeftRef.current;
+      if (leftId && message.role === "assistant") {
+        const text = getMessageText(message);
+        if (text) {
+          await addMessage.mutateAsync({
+            conversationId: leftId,
+            role: "assistant",
+            content: text,
+          });
+        }
+      }
       void utils.benchmark.list.invalidate();
       void utils.benchmark.getLatest.invalidate();
     },
   });
   const chatRight = useChat({
-    id: `bench-right-${convIdRight ?? "new"}`,
+    id: "bench-right",
     transport: transportRight,
     messages:
       initialMessagesRight.length > 0 ? initialMessagesRight : undefined,
-    onFinish: () => {
+    onFinish: async ({ message }) => {
+      // Persist assistant response from client (reliable — refs always have latest IDs)
+      const rightId = convIdRightRef.current;
+      if (rightId && message.role === "assistant") {
+        const text = getMessageText(message);
+        if (text) {
+          await addMessage.mutateAsync({
+            conversationId: rightId,
+            role: "assistant",
+            content: text,
+          });
+        }
+      }
       void utils.benchmark.list.invalidate();
       void utils.benchmark.getLatest.invalidate();
     },
@@ -573,6 +606,28 @@ export default function BenchmarkPage() {
     }
   }, [rightMsgCount]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Deferred first-message send: waits for transport to have correct conversation IDs
+  useEffect(() => {
+    if (pendingMessage && convIdLeft && convIdRight) {
+      // Persist user message to both conversations
+      void addMessage.mutateAsync({
+        conversationId: convIdLeft,
+        role: "user",
+        content: pendingMessage,
+      });
+      void addMessage.mutateAsync({
+        conversationId: convIdRight,
+        role: "user",
+        content: pendingMessage,
+      });
+
+      // Now transport has the correct IDs — fire both model requests
+      void chatLeft.sendMessage({ text: pendingMessage });
+      void chatRight.sendMessage({ text: pendingMessage });
+      setPendingMessage(null);
+    }
+  }, [pendingMessage, convIdLeft, convIdRight]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const isLoadingLeft =
     chatLeft.status === "streaming" || chatLeft.status === "submitted";
   const isLoadingRight =
@@ -590,9 +645,6 @@ export default function BenchmarkPage() {
       setInput("");
 
       try {
-        let leftId = convIdLeft;
-        let rightId = convIdRight;
-
         // Create benchmark record + conversations on first send
         if (!benchmarkId) {
           const bench = await createBenchmark.mutateAsync({
@@ -603,27 +655,27 @@ export default function BenchmarkPage() {
             level: level || undefined,
           });
           setBenchmarkId(bench!.id);
-          leftId = bench!.conversationLeftId;
-          rightId = bench!.conversationRightId;
-          setConvIdLeft(leftId);
-          setConvIdRight(rightId);
+          setConvIdLeft(bench!.conversationLeftId);
+          setConvIdRight(bench!.conversationRightId);
+          // Defer sendMessage to next render so transport picks up the new IDs
+          setPendingMessage(text);
+        } else {
+          // Existing benchmark — transport already has correct conversation IDs
+          void addMessage.mutateAsync({
+            conversationId: convIdLeft!,
+            role: "user",
+            content: text,
+          });
+          void addMessage.mutateAsync({
+            conversationId: convIdRight!,
+            role: "user",
+            content: text,
+          });
+
+          // Fire both model requests simultaneously
+          void chatLeft.sendMessage({ text });
+          void chatRight.sendMessage({ text });
         }
-
-        // Persist user message to both conversations
-        void addMessage.mutateAsync({
-          conversationId: leftId!,
-          role: "user",
-          content: text,
-        });
-        void addMessage.mutateAsync({
-          conversationId: rightId!,
-          role: "user",
-          content: text,
-        });
-
-        // Fire both model requests simultaneously
-        void chatLeft.sendMessage({ text });
-        void chatRight.sendMessage({ text });
       } finally {
         setIsSending(false);
       }
@@ -830,7 +882,9 @@ export default function BenchmarkPage() {
           />
           <Button
             aria-label="Send message"
-            disabled={!input.trim() || isLoading || isSending}
+            disabled={
+              !input.trim() || isLoading || isSending || !!pendingMessage
+            }
             type="submit"
             size="icon"
           >
