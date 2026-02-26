@@ -208,6 +208,7 @@ export default function GeneralChatPage() {
   const [level, setLevel] = useState<string>("");
   const [input, setInput] = useState("");
   const [conversationId, setConversationId] = useState<string | null>(null);
+  const conversationIdRef = useRef<string | null>(null);
   const [isSending, setIsSending] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -216,14 +217,19 @@ export default function GeneralChatPage() {
   const autoTitle = api.chat.autoTitle.useMutation();
   const utils = api.useUtils();
 
+  const subjectRef = useRef(subject);
+  subjectRef.current = subject;
+  const levelRef = useRef(level);
+  levelRef.current = level;
+
   const { messages, sendMessage, status } = useChat({
     transport: new DefaultChatTransport({
       api: "/api/chat",
-      body: {
-        conversationId,
-        subject: subject || undefined,
-        level: level || undefined,
-      },
+      body: () => ({
+        conversationId: conversationIdRef.current,
+        subject: subjectRef.current || undefined,
+        level: levelRef.current || undefined,
+      }),
     }),
     onFinish: () => {
       void utils.chat.listConversations.invalidate();
@@ -259,13 +265,14 @@ export default function GeneralChatPage() {
           });
           if (conv) {
             activeConvId = conv.id;
+            conversationIdRef.current = conv.id;
             setConversationId(conv.id);
 
             // Navigate to the conversation URL so messages persist
-            router.replace(`/chat/${conv.id}`);
+            // router.replace(`/chat/${conv.id}`);
 
             // Auto-title from first message
-            void autoTitle.mutateAsync({
+            await autoTitle.mutateAsync({
               id: conv.id,
               firstMessage: messageText,
             });
@@ -276,8 +283,14 @@ export default function GeneralChatPage() {
       }
 
       // Persist user message
+      console.log("Before save conversation", activeConvId, messageText);
       if (activeConvId) {
-        void addMessage.mutateAsync({
+        console.log(
+          "Saving message to conversation",
+          activeConvId,
+          messageText,
+        );
+        await addMessage.mutateAsync({
           conversationId: activeConvId,
           role: "user",
           content: messageText,
@@ -285,8 +298,9 @@ export default function GeneralChatPage() {
       }
 
       // Send to AI (useChat v6 handles the rest)
-      void sendMessage({ text: messageText });
+      await sendMessage({ text: messageText });
       setIsSending(false);
+      // router.replace(`/chat/${activeConvId}`);
     },
     [
       input,

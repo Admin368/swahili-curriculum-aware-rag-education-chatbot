@@ -214,6 +214,23 @@ export default function ConversationPage() {
   const addMessage = api.chat.addMessage.useMutation();
   const utils = api.useUtils();
 
+  // Build a map of message ID -> stored references from DB
+  const dbReferencesMap = useMemo(() => {
+    const map = new Map<string, Reference[]>();
+    if (conversation?.messages) {
+      for (const m of conversation.messages) {
+        if (
+          m.role === "assistant" &&
+          m.references &&
+          Array.isArray(m.references)
+        ) {
+          map.set(m.id, m.references as Reference[]);
+        }
+      }
+    }
+    return map;
+  }, [conversation?.messages]);
+
   // Convert DB messages to UIMessage format for initial messages
   const initialMessages: UIMessage[] = useMemo(
     () =>
@@ -244,7 +261,7 @@ export default function ConversationPage() {
     ],
   );
 
-  const { messages, sendMessage, status } = useChat({
+  const { messages, setMessages, sendMessage, status } = useChat({
     id: conversationId,
     transport,
     messages: initialMessages.length > 0 ? initialMessages : undefined,
@@ -252,6 +269,18 @@ export default function ConversationPage() {
       void utils.chat.listConversations.invalidate();
     },
   });
+
+  // Sync DB messages into the chat when conversation data loads/changes.
+  // This ensures messages reappear when navigating back to a conversation
+  // (the `messages` ChatInit prop is only read on first hook mount; if the
+  // hook was already initialised with an empty array we need to push the
+  // loaded messages in via setMessages).
+  const dbMessageCount = conversation?.messages?.length ?? 0;
+  useEffect(() => {
+    if (initialMessages.length > 0 && messages.length === 0) {
+      setMessages(initialMessages);
+    }
+  }, [dbMessageCount]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const isLoading = status === "streaming" || status === "submitted";
 
@@ -302,9 +331,12 @@ export default function ConversationPage() {
     }
   };
 
-  // Extract references from tool invocations (v6 parts)
+  // Extract references — first from tool invocations (live streaming), then
+  // fall back to the persisted DB references for messages loaded from history.
   const getReferencesForMessage = (msg: UIMessage): Reference[] => {
     if (msg.role !== "assistant") return [];
+
+    // Try live tool-call references first (present during/after streaming)
     const refs: Reference[] = [];
     for (const part of msg.parts) {
       if (
@@ -338,7 +370,10 @@ export default function ConversationPage() {
         }
       }
     }
-    return refs;
+    if (refs.length > 0) return refs;
+
+    // Fall back to stored DB references for historical messages
+    return dbReferencesMap.get(msg.id) ?? [];
   };
 
   if (loadingConversation) {

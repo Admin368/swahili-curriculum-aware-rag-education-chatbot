@@ -30,6 +30,8 @@ export async function POST(req: Request) {
   };
   const { messages: chatMessages, conversationId, subject, level } = body;
 
+  // console.log("/chat", body);
+
   // Verify conversation ownership if provided
   if (conversationId) {
     const conv = await db.query.conversations.findFirst({
