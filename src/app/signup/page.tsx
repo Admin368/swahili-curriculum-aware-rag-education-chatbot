@@ -144,7 +144,7 @@ export default function SignUpPage() {
             </Button>
           </form>
 
-          <div className="my-6 flex items-center gap-4">
+          {/* <div className="my-6 flex items-center gap-4">
             <Separator className="flex-1" />
             <span className="text-muted-foreground text-xs">or</span>
             <Separator className="flex-1" />
@@ -152,7 +152,7 @@ export default function SignUpPage() {
 
           <Button className="w-full" variant="outline">
             Continue with Google
-          </Button>
+          </Button> */}
 
           <p className="mt-6 text-center text-muted-foreground text-sm">
             {"Already have an account? "}
