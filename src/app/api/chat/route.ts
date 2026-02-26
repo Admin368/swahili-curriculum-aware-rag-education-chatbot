@@ -1,5 +1,5 @@
 import { auth } from "@/server/auth";
-import { chatModel } from "@/server/ai";
+import { chatModel, openrouter } from "@/server/ai";
 import { findRelevantChunks } from "@/server/ai/embedding";
 import { db } from "@/server/db";
 import { conversations, messages } from "@/server/db/schema";
@@ -13,6 +13,7 @@ import {
   stepCountIs,
 } from "ai";
 import { z } from "zod";
+import { MODELS } from "@/lib/constants";
 
 export const maxDuration = 60;
 
@@ -27,8 +28,22 @@ export async function POST(req: Request) {
     conversationId?: string;
     subject?: string;
     level?: string;
+    model?: string;
   };
-  const { messages: chatMessages, conversationId, subject, level } = body;
+  const {
+    messages: chatMessages,
+    conversationId,
+    subject,
+    level,
+    model: requestedModel,
+  } = body;
+
+  // Resolve the model: use requested model key if valid, otherwise default
+  const validModelKeys = new Set(Object.values(MODELS).map((m) => m.key));
+  const resolvedModel =
+    requestedModel && validModelKeys.has(requestedModel)
+      ? openrouter(requestedModel)
+      : chatModel;
 
   // console.log("/chat", body);
 
@@ -73,7 +88,7 @@ ${level ? `Current level context: ${level}` : ""}`;
   const modelMessages = await convertToModelMessages(chatMessages);
 
   const result = streamText({
-    model: chatModel,
+    model: resolvedModel,
     messages: modelMessages,
     system: systemPrompt,
     stopWhen: stepCountIs(5),
@@ -152,7 +167,7 @@ ${level ? `Current level context: ${level}` : ""}`;
         }),
         execute: async ({ query }: { query: string }) => {
           const { object } = await generateObject({
-            model: chatModel,
+            model: resolvedModel,
             system:
               "You are a query understanding assistant for a Tanzanian education chatbot. Analyze the student query and generate similar questions that could help find relevant curriculum content. Generate questions in both English and Swahili when appropriate.",
             schema: z.object({

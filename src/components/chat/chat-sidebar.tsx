@@ -5,6 +5,7 @@ import {
   FileText,
   FlaskConical,
   FolderOpen,
+  GitCompareArrows,
   Layers,
   LogOut,
   Menu,
@@ -53,6 +54,7 @@ const navItems = [
   { href: "/chat/quiz", label: "Quiz Mode", icon: FlaskConical },
   { href: "/chat/flashcards", label: "Flashcards", icon: Layers },
   { href: "/chat/summarizer", label: "Summarizer", icon: FileText },
+  { href: "/chat/benchmark", label: "Benchmark", icon: GitCompareArrows },
 ];
 
 function SidebarContent({
