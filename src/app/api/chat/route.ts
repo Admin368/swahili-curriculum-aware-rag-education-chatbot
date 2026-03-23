@@ -5,73 +5,74 @@ import { db } from "@/server/db";
 import { conversations, messages } from "@/server/db/schema";
 import { eq, and } from "drizzle-orm";
 import {
-  type UIMessage,
-  streamText,
-  convertToModelMessages,
-  tool,
-  generateObject,
-  stepCountIs,
+	type UIMessage,
+	streamText,
+	convertToModelMessages,
+	tool,
+	generateObject,
+	stepCountIs,
 } from "ai";
 import { z } from "zod";
 import { MODELS } from "@/lib/constants";
+import { env } from "@/env";
 
 export const maxDuration = 60;
 
 export async function POST(req: Request) {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return new Response("Unauthorized", { status: 401 });
-  }
+	const session = await auth();
+	if (!session?.user?.id) {
+		return new Response("Unauthorized", { status: 401 });
+	}
 
-  const body = (await req.json()) as {
-    messages: UIMessage[];
-    conversationId?: string;
-    subject?: string;
-    level?: string;
-    model?: string;
-    benchmarkMode?: boolean;
-  };
-  const {
-    messages: chatMessages,
-    conversationId,
-    subject,
-    level,
-    model: requestedModel,
-    benchmarkMode,
-  } = body;
+	const body = (await req.json()) as {
+		messages: UIMessage[];
+		conversationId?: string;
+		subject?: string;
+		level?: string;
+		model?: string;
+		benchmarkMode?: boolean;
+	};
+	const {
+		messages: chatMessages,
+		conversationId,
+		subject,
+		level,
+		model: requestedModel,
+		benchmarkMode,
+	} = body;
 
-  // Resolve the model: use requested model key if valid, otherwise default
-  const validModelKeys = new Set(Object.values(MODELS).map((m) => m.key));
-  const resolvedModel =
-    requestedModel && validModelKeys.has(requestedModel)
-      ? openrouter(requestedModel)
-      : chatModel;
+	// Resolve the model: use requested model key if valid, otherwise default
+	const validModelKeys = new Set(Object.values(MODELS).map((m) => m.key));
+	const resolvedModel =
+		requestedModel && validModelKeys.has(requestedModel)
+			? openrouter(requestedModel)
+			: chatModel;
 
-  // console.log("/chat", body);
+	// console.log("/chat", body);
 
-  // Verify conversation ownership if provided
-  if (conversationId) {
-    const conv = await db.query.conversations.findFirst({
-      where: and(
-        eq(conversations.id, conversationId),
-        eq(conversations.userId, session.user.id),
-      ),
-    });
-    if (!conv) {
-      return new Response("Conversation not found", { status: 404 });
-    }
-  }
+	// Verify conversation ownership if provided
+	if (conversationId) {
+		const conv = await db.query.conversations.findFirst({
+			where: and(
+				eq(conversations.id, conversationId),
+				eq(conversations.userId, session.user.id),
+			),
+		});
+		if (!conv) {
+			return new Response("Conversation not found", { status: 404 });
+		}
+	}
 
-  // Collected references from tool calls for persistence
-  const collectedReferences: Array<{
-    chunkId: string;
-    content: string;
-    subject?: string;
-    level?: string;
-    similarity?: number;
-  }> = [];
+	// Collected references from tool calls for persistence
+	const collectedReferences: Array<{
+		chunkId: string;
+		content: string;
+		subject?: string;
+		level?: string;
+		similarity?: number;
+	}> = [];
 
-  const systemPrompt = `You are a Tanzanian curriculum education assistant called "Elimu AI" (Elimu means education in Swahili).
+	const systemPrompt = `You are a Tanzanian curriculum education assistant called "Elimu AI" (Elimu means education in Swahili).
 You help secondary school students study subjects including History (Historia), Civics (Uraia), Geography (Jiografia), and Literature (Fasihi) for Form 1 through Form 4.
 
 CRITICAL RULES:
@@ -87,130 +88,165 @@ CRITICAL RULES:
 ${subject ? `Current subject context: ${subject}` : ""}
 ${level ? `Current level context: ${level}` : ""}`;
 
-  const modelMessages = await convertToModelMessages(chatMessages);
+	const modelMessages = await convertToModelMessages(chatMessages);
 
-  const result = streamText({
-    model: resolvedModel,
-    messages: modelMessages,
-    system: systemPrompt,
-    stopWhen: stepCountIs(5),
-    tools: {
-      getInformation: tool({
-        description:
-          "Search the curriculum knowledge base for information to answer the student's question. Always use this before answering.",
-        inputSchema: z.object({
-          question: z
-            .string()
-            .describe("The student's question or topic to search for"),
-          keywords: z
-            .array(z.string())
-            .describe(
-              "Additional keywords or related terms to broaden the search",
-            ),
-        }),
-        execute: async ({
-          question,
-          keywords,
-        }: {
-          question: string;
-          keywords: string[];
-        }) => {
-          // Search with the main question
-          const mainResults = await findRelevantChunks(question, {
-            subject,
-            level,
-            limit: 4,
-          });
+	const result = streamText({
+		model: resolvedModel,
+		messages: modelMessages,
+		system: systemPrompt,
+		stopWhen: stepCountIs(5),
+		tools: {
+			getInformation: tool({
+				description:
+					"Search the curriculum knowledge base for information to answer the student's question. Always use this before answering.",
+				inputSchema: z.object({
+					question: z
+						.string()
+						.describe("The student's question or topic to search for"),
+					keywords: z
+						.array(z.string())
+						.describe(
+							"Additional keywords or related terms to broaden the search",
+						),
+				}),
+				execute: async ({
+					question,
+					keywords,
+				}: {
+					question: string;
+					keywords: string[];
+				}) => {
+					// Search with the main question
+					env.NEXT_PUBLIC_IS_DEBUGGING &&
+						console.log("RAG-Start=> for question:", question);
+					const mainResults = await findRelevantChunks(question, {
+						subject,
+						level,
+						limit: 4,
+					})
+						.then((results) => {
+							return results;
+						})
+						.catch((e) => {
+							console.error(
+								"RAG-Error => in findRelevantChunks for question:",
+								e,
+							);
+						});
+					env.NEXT_PUBLIC_IS_DEBUGGING &&
+						console.log(
+							`RAG-Results=> [${mainResults?.length ?? 0}]:`,
+							mainResults,
+						);
 
-          // Search with additional keywords for broader coverage
-          const keywordResults = await Promise.all(
-            keywords.slice(0, 2).map((kw: string) =>
-              findRelevantChunks(kw, {
-                subject,
-                level,
-                limit: 2,
-              }),
-            ),
-          );
+					// Search with additional keywords for broader coverage
+					env.NEXT_PUBLIC_IS_DEBUGGING &&
+						console.log("RAG2-Start=> for keywords:", keywords);
+					const keywordResults = await Promise.all(
+						keywords.slice(0, 2).map((kw: string) =>
+							findRelevantChunks(kw, {
+								subject,
+								level,
+								limit: 2,
+							}),
+						),
+					)
+						.then((results) => {
+							return results;
+						})
+						.catch((e) => {
+							console.error(
+								"RAG2-Error => in findRelevantChunks for keywords:",
+								e,
+							);
+						});
+					env.NEXT_PUBLIC_IS_DEBUGGING &&
+						console.log(
+							`RAG2-Results=> for keywords [${keywords.slice(0, 2).join(", ")}]:`,
+							keywordResults,
+						);
 
-          // Deduplicate by chunk id
-          const allResults = [...mainResults, ...keywordResults.flat()];
-          const uniqueResults = Array.from(
-            new Map(allResults.map((r) => [r.id, r])).values(),
-          );
+					// Deduplicate by chunk id
+					const allResults = [
+						...(mainResults ?? []),
+						...(keywordResults?.flat() ?? []),
+					];
+					const uniqueResults = Array.from(
+						new Map(allResults.map((r) => [r.id, r])).values(),
+					);
 
-          // Collect references for persistence
-          for (const r of uniqueResults) {
-            collectedReferences.push({
-              chunkId: r.id,
-              content: r.content.slice(0, 200),
-              subject: r.subject ?? undefined,
-              level: r.level ?? undefined,
-              similarity: r.similarity,
-            });
-          }
+					// Collect references for persistence
+					for (const r of uniqueResults) {
+						collectedReferences.push({
+							chunkId: r.id,
+							content: r.content.slice(0, 200),
+							subject: r.subject ?? undefined,
+							level: r.level ?? undefined,
+							similarity: r.similarity,
+						});
+					}
 
-          return uniqueResults.map((r) => ({
-            content: r.content,
-            subject: r.subject,
-            level: r.level,
-            language: r.language,
-            sourcePage: r.sourcePage,
-            similarity: r.similarity,
-          }));
-        },
-      }),
+					return uniqueResults.map((r) => ({
+						content: r.content,
+						subject: r.subject,
+						level: r.level,
+						language: r.language,
+						sourcePage: r.sourcePage,
+						similarity: r.similarity,
+					}));
+				},
+			}),
 
-      understandQuery: tool({
-        description:
-          "Analyze the student's query and generate similar/related questions to improve search coverage.",
-        inputSchema: z.object({
-          query: z.string().describe("The student's query"),
-        }),
-        execute: async ({ query }: { query: string }) => {
-          const { object } = await generateObject({
-            model: resolvedModel,
-            system:
-              "You are a query understanding assistant for a Tanzanian education chatbot. Analyze the student query and generate similar questions that could help find relevant curriculum content. Generate questions in both English and Swahili when appropriate.",
-            schema: z.object({
-              questions: z
-                .array(z.string())
-                .max(3)
-                .describe(
-                  "Similar questions to broaden the search. Include Swahili variants if applicable.",
-                ),
-            }),
-            prompt: `Analyze this student query: "${query}". Generate 3 similar questions that could help find relevant curriculum content.`,
-          });
-          return object.questions;
-        },
-      }),
-    },
+			understandQuery: tool({
+				description:
+					"Analyze the student's query and generate similar/related questions to improve search coverage.",
+				inputSchema: z.object({
+					query: z.string().describe("The student's query"),
+				}),
+				execute: async ({ query }: { query: string }) => {
+					const { object } = await generateObject({
+						model: resolvedModel,
+						system:
+							"You are a query understanding assistant for a Tanzanian education chatbot. Analyze the student query and generate similar questions that could help find relevant curriculum content. Generate questions in both English and Swahili when appropriate.",
+						schema: z.object({
+							questions: z
+								.array(z.string())
+								.max(3)
+								.describe(
+									"Similar questions to broaden the search. Include Swahili variants if applicable.",
+								),
+						}),
+						prompt: `Analyze this student query: "${query}". Generate 3 similar questions that could help find relevant curriculum content.`,
+					});
+					return object.questions;
+				},
+			}),
+		},
 
-    async onFinish({ text }) {
-      // Persist assistant message to DB if we have a conversation
-      // Skip for benchmark mode — benchmark page saves from the client side
-      if (conversationId && text && !benchmarkMode) {
-        try {
-          await db.insert(messages).values({
-            conversationId,
-            role: "assistant",
-            content: text,
-            references:
-              collectedReferences.length > 0 ? collectedReferences : null,
-          });
+		async onFinish({ text }) {
+			// Persist assistant message to DB if we have a conversation
+			// Skip for benchmark mode — benchmark page saves from the client side
+			if (conversationId && text && !benchmarkMode) {
+				try {
+					await db.insert(messages).values({
+						conversationId,
+						role: "assistant",
+						content: text,
+						references:
+							collectedReferences.length > 0 ? collectedReferences : null,
+					});
 
-          // Touch conversation updatedAt
-          await db
-            .update(conversations)
-            .set({ updatedAt: new Date() })
-            .where(eq(conversations.id, conversationId));
-        } catch (e) {
-          console.error("Failed to persist assistant message:", e);
-        }
-      }
-    },
-  });
+					// Touch conversation updatedAt
+					await db
+						.update(conversations)
+						.set({ updatedAt: new Date() })
+						.where(eq(conversations.id, conversationId));
+				} catch (e) {
+					console.error("Failed to persist assistant message:", e);
+				}
+			}
+		},
+	});
 
-  return result.toUIMessageStreamResponse();
+	return result.toUIMessageStreamResponse();
 }
